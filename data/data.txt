@@ -1,0 +1,2 @@
+This is where data-driven assets loaded by the program will be located and loaded by the library.
+All of the premade asset modules will be located here (probably).

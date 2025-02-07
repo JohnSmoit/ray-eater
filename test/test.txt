@@ -1,0 +1,2 @@
+Nested within this directory, you will find test applications which include the library and use it for various
+types of testing. Also there are unit tests and benchmarks I guess.
