@@ -1,2 +1,4 @@
 # Welcome to the RAY EATER Open Source Repository!
-## TODO: Fill out README To specification
+## TODO: Description/Usage instructions coming soon
+For now, please content yourself with this artisan bacon: 🥓
+
