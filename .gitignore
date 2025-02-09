@@ -2,3 +2,5 @@ build
 test/**/build
 test/**/bin
 bin
+CMakeFiles
+.vscode
