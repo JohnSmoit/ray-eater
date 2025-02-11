@@ -61,6 +61,8 @@ int main(int argc, char** argv) {
     double timeStamp = dllHellFunc();
     const char * platformLabel = platformLabelFunc();
 
+    printf("Time: %lf\n", timeStamp);
+
     if (strcmp(curse, "Curse Unholy Retribution Sacrilege Evil")) {
         fprintf(stderr, "[FAILED -- OUTPUT -- %s]\n", funcName);
         return EXIT_FAILURE;
