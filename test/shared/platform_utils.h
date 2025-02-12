@@ -1,3 +1,6 @@
+#ifndef TEST_PLATFORM_UTILS_H
+#define TEST_PLATFORM_UTILS_H
+
 #define INVALID_MODULE 0
 
 
@@ -9,7 +12,7 @@ typedef void * FType_Proc;
 typedef unsigned int b32;
 
 
-HModule platLoadLibrary(const char * name);
+HModule platLoadLibrary(HModule mod, const char * name);
 
 b32 platUnloadLibrary(HModule module);
 
@@ -17,3 +20,5 @@ FType_Proc platGetProcAddr(HModule mod, const char * name);
 
 #define platGetProcAddrt(mod, name, type) \
     (type) platGetProcAddr(mod, name)
+
+#endif

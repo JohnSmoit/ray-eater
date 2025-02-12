@@ -1,0 +1,3 @@
+Note: Includes to these source files by the main library must be
+separated by a separate project domain 
+(i.e rsh/file.h rather than file.h or ../file.h)

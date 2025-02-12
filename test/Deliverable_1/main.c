@@ -3,25 +3,26 @@
 #include <string.h>
 
 #include "shared/platform_utils.h"
+#include "ray_eater.h"
 
 /* Returns the system time in a stupid platform-dependent way */
-typedef double (*FType_helloDllHell1)(void);
+typedef TimeStamp (__cdecl *FType_helloDllHell)(void);
 
 /* returns an incoherent platforom-dependent rambling, the parameter does something ill-defined
  * since I wrote these function types before figuring out what they would do.*/
-typedef const char * (*FType_getDllCurse)(const char *);
+typedef const char * (__cdecl *FType_getDllCurse)(const char *);
 
 /* returns a string pertaining to the current operating system and other relevant platform details. */
-typedef const char * (*FType_getPlatformLabel)(void);
+typedef const char * (__cdecl *FType_getPlatformLabel)(void);
 
 
 
 int main(int argc, char** argv) {
-    FType_helloDllHell1 dllHellFunc;
+    FType_helloDllHell dllHellFunc;
     FType_getDllCurse dllCurseFunc;
     FType_getPlatformLabel platformLabelFunc;
 
-    HModule libModule;
+    HModule libModule = NULL;
     const char * funcName;
 
     // I think CTest uses program output for test validation, so let's keep reporting to a minimum
@@ -31,13 +32,13 @@ int main(int argc, char** argv) {
     // printf("Platform: [PLATFORM_LABEL_HERE]\n");
 
     // verify Shared Library and functions loaded correctly
-    if ((libModule = platLoadLibrary("RayEater")) == INVALID_MODULE) {
+    if ((libModule = platLoadLibrary(libModule, "RayEater.dll")) == INVALID_MODULE) {
         perror("[FAILED -- LIB]\n");
         return EXIT_FAILURE;
     }
 
     funcName = "helloDllHell";
-    if (!(dllHellFunc = platGetProcAddrt(libModule, funcName, FType_helloDllHell1))) {
+    if (!(dllHellFunc = platGetProcAddrt(libModule, funcName, FType_helloDllHell))) {
         fprintf(stderr, "[FAILED -- FUNC -- %s]\n", funcName);
         return EXIT_FAILURE;
     }
@@ -58,17 +59,18 @@ int main(int argc, char** argv) {
     const char * curse = dllCurseFunc("CURSE");
 
     // these are kind of not worth output testing...
-    double timeStamp = dllHellFunc();
+    TimeStamp stamp = dllHellFunc();
     const char * platformLabel = platformLabelFunc();
 
-    printf("Time: %lf\n", timeStamp);
+    printf("Time: %02d/%02d/%04d -- %02d:%02d:%02d\n", 
+        stamp.month, stamp.day, stamp.year,
+        stamp.hour, stamp.minute, stamp.second
+    );
 
-    if (strcmp(curse, "Curse Unholy Retribution Sacrilege Evil")) {
+    if (strcmp(curse, "Coga Uoga Roga Soga Eoga")) {
         fprintf(stderr, "[FAILED -- OUTPUT -- %s]\n", funcName);
         return EXIT_FAILURE;
     }
-
-
 
     // verify Shared Library unloaded correctly
     if (!platUnloadLibrary(libModule)) {
