@@ -6,14 +6,14 @@
 #include "ray_eater.h"
 
 /* Returns the system time in a stupid platform-dependent way */
-typedef TimeStamp (__cdecl *FType_helloDllHell)(void);
+typedef TimeStamp (*FType_helloDllHell)(void);
 
 /* returns an incoherent platforom-dependent rambling, the parameter does something ill-defined
  * since I wrote these function types before figuring out what they would do.*/
-typedef const char * (__cdecl *FType_getDllCurse)(const char *);
+typedef const char * (*FType_getDllCurse)(const char *);
 
 /* returns a string pertaining to the current operating system and other relevant platform details. */
-typedef const char * (__cdecl *FType_getPlatformLabel)(void);
+typedef const char * (*FType_getPlatformLabel)(void);
 
 
 
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
     );
 
     if (strcmp(curse, "Coga Uoga Roga Soga Eoga")) {
-        fprintf(stderr, "[FAILED -- OUTPUT -- %s]\n", funcName);
+        fprintf(stderr, "[FAILED -- OUTPUT -- |%s| VS |%s|]\n", curse, "Coga Uoga Roga Soga Eoga");
         return EXIT_FAILURE;
     }
 

@@ -12,7 +12,7 @@
  * Despite it's name, gets the platform-dependent timestamp for
  * some reason.
  */
-RAY_API_FUNC(TimeStamp) helloDllHell() {
+TimeStamp helloDllHell() {
 	return systemTimeStamp();
 }
 
@@ -50,7 +50,7 @@ const char * map[] = {
  * Platform independent per-character word substitutor
  * This mallocs so make sure to free it
  */
-RAY_API_FUNC(const char *) getDllCurse(const char * message) {
+const char * getDllCurse(const char * message) {
 	if (!message) return "";
 
 	size_t msgLen = strlen(message);
@@ -68,13 +68,14 @@ RAY_API_FUNC(const char *) getDllCurse(const char * message) {
 		eBuf += 5;
 	}
 
+	buf[bufSize - 1] = '\0';
 	return buf;
 }
 
 /* Returns a pre-built platform label string
 Intended to test CMAKE project generation
 */
-RAY_API_FUNC(const char *) getPlatformLabel() {
+const char * getPlatformLabel() {
 	return PLATFORM_LABEL; 
 }
 

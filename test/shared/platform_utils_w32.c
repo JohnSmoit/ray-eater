@@ -15,6 +15,8 @@ HModule platLoadLibrary(HModule mod, const char * name) {
     }
 
     mod = (HModule) malloc(sizeof(struct Module));
+    mod->module = w32Module;
+
     return mod;
 }
 
@@ -33,6 +35,5 @@ FType_Proc platGetProcAddr(HModule mod, const char * name) {
     if (!mod) return NULL;
     FARPROC prc = GetProcAddress(mod->module, name);
 
-    printf("Gettinf function %s from module which is %p %p\n", name, mod, prc);
     return prc;
 }
