@@ -20,10 +20,12 @@ add_library(RayEater SHARED
 #     message(ERROR_FATAL "Oopsie Poopsie, there's no static option yet heehee")
 # endif()
 # TODO: Static compilation
+set(BUILD_PLATFORM_LABEL "${CMAKE_SYSTEM_NAME}:${CMAKE_SYSTEM_PROCESSOR} -- Compiled Using ${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}")
+configure_file(lib/platform/info.h.in ../../include/info.h)
 
 target_include_directories(RayEater PUBLIC
     "src/lib"
-    "include"
+    "../include"
 ) #FIXME: THIS DOES NOT WORK FOR HEADER INCLUDES AAAAAAAH
 
 set_target_properties(RayEater PROPERTIES

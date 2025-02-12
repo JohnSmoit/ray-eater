@@ -62,6 +62,7 @@ int main(int argc, char** argv) {
     TimeStamp stamp = dllHellFunc();
     const char * platformLabel = platformLabelFunc();
 
+    printf("RayEater Binary Built on: %s\n", platformLabel);
     printf("Time: %02d/%02d/%04d -- %02d:%02d:%02d\n", 
         stamp.month, stamp.day, stamp.year,
         stamp.hour, stamp.minute, stamp.second

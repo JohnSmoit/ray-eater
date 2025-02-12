@@ -6,7 +6,7 @@
 
 
 
-#include "platform/info.h"
+#include "info.h"
 
 /**
  * Despite it's name, gets the platform-dependent timestamp for
@@ -76,7 +76,7 @@ const char * getDllCurse(const char * message) {
 Intended to test CMAKE project generation
 */
 const char * getPlatformLabel() {
-	return PLATFORM_LABEL; 
+	return RAY_PLATFORM_LABEL; 
 }
 
 const char * daily_word(time_t time) {

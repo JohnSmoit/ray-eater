@@ -1,7 +1,0 @@
-#ifndef PLATFORM_INFO_H
-#define PLATFORM_INFO_H
-
-#define PLATFORM_LABEL "PLATFORM_LABEL_HERE"
-
-
-#endif
