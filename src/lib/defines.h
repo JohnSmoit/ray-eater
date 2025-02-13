@@ -6,11 +6,17 @@
 #endif;
 
 #ifdef __cplusplus
-    #define RAY_API extern "C" __declspec(dllexport)
-    #define RAY_API_FUNC(ret) extern "C" __declspec(dllexport) ret __cdecl
+    #define C_INTERFACE extern "C"
 #else
-    #define RAY_API __declspec(dllexport)
-    #define RAY_API_FUNC(ret) __declspec(dllexport) ret __cdecl
+    #define C_INTERFACE
 #endif
+
+#if defined(_WIN32)
+    #define EXPORT_DECORATOR __declspec(dllexport)
+#else
+    #define EXPORT_DECORATOR
+#endif
+
+#define RAY_API C_INTERFACE EXPORT_DECORATOR
 
 #endif

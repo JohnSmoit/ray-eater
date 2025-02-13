@@ -1,6 +1,8 @@
 
 if (WIN32)
     set(PLATFORM_EXT "Win32")
+elseif(UNIX)
+    
 else()
     set(PLATFORM_EXT "NOT_SUPPORTED")
 endif()
