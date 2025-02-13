@@ -21,6 +21,6 @@ Intended to test CMAKE project generation
 */
 RAY_API const char * getPlatformLabel();
 
-__declspec(dllexport) const char * daily_word(time_t time);
+RAY_API const char * daily_word(time_t time);
 
 #endif
