@@ -8,7 +8,7 @@ struct Module {
 };
 
 HModule platLoadLibrary(HModule mod, const char * name) {
-    void * handle = dlopen(name, RTLD_LAZY);
+    void * handle = dlopen("RayEater.so", RTLD_LAZY);
     if (!handle) {
         return NULL;
     }

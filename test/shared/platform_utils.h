@@ -17,7 +17,6 @@ typedef unsigned int b32;
     #define FALSE 0
 #endif
 
-
 HModule platLoadLibrary(HModule mod, const char * name);
 
 b32 platUnloadLibrary(HModule module);
