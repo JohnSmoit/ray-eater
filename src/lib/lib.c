@@ -63,7 +63,7 @@ const char * getDllCurse(const char * message) {
 	for (size_t i = 0; i < msgLen; i++) {
 		const char * word = map[tolower(message[i]) - 'a'];
 
-		strncpy_s(eBuf, bufSize, word, 4);
+		strncpy(eBuf, word, 4);
 		eBuf[4] = ' ';
 		eBuf += 5;
 	}
