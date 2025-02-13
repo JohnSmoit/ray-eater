@@ -1,0 +1,19 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Configure
+      run: cmake -B {{ github.workspace }}/build -DBUILD_TESTS=ON -DTEST_ROOT=Deliverable_1
+    - name: Build
+      run: cmake --build {{ github.workspace }}/build
