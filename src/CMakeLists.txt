@@ -4,7 +4,7 @@ if (WIN32)
 elseif(UNIX)
     set(PLATFORM_EXT "Unix")
 else()
-    set(PLATFORM_EXT "NOT_SUPPORTED")
+    set(PLATFORM_EXT "ifyouseethisinanerrormessagethanyourplatformisnotsupported")
 endif()
 
 set(RAY_EATER_SOURCES
