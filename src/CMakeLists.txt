@@ -12,6 +12,8 @@ set(RAY_EATER_SOURCES
     "lib/platform/utils_${PLATFORM_EXT}.c"
 )
 
+message(STATUS "Platform Extension: ${PLATFORM_EXT}")
+
 option(BINARY_BUILD_TYPE "<Specify the type of binary to output>" "SHARED")
 
 

@@ -8,8 +8,17 @@ cmake_minimum_required(VERSION 3.10)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED True)
 
+if (WIN32)
+    set(PLATFORM_EXT "Win32")
+elseif(UNIX)
+    set(PLATFORM_EXT "Unix")
+else()
+    set(PLATFORM_EXT "NOT_SUPPORTED")
+endif()
+
 option(TEST_ROOT "<test-folder>" "Deliverable_1")
 
+message(STATUS "Platform Extension: ${PLATFORM_EXT}")
 
 
 if(TEST_ROOT MATCHES "^\.+[\/\\]*shared[\/\\]*$")

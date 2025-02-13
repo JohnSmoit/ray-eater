@@ -1,3 +1,3 @@
 set(SharedSourceFiles
-    "shared/$<$<PLATFORM_ID:Windows>:platform_utils_w32.c>"
+    "shared/platform_utils_${PLATFORM_EXT}.c"
 )

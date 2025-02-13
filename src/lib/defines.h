@@ -3,7 +3,7 @@
 
 #ifndef NULL
     #define NULL ((void *) 0);
-#endif;
+#endif
 
 #ifdef __cplusplus
     #define C_INTERFACE extern "C"
