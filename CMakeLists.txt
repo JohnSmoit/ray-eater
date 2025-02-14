@@ -14,13 +14,22 @@ message(STATUS "CMake C++ compiler: ${CMAKE_CXX_COMPILER_ID}")
 message(STATUS "CMake system name: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "CMake host system processor: ${CMAKE_HOST_SYSTEM_PROCESSOR}")
 
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)
-
+if (WIN32)
+    set(PLATFORM_EXT "Win32")
+elseif(UNIX)
+    set(PLATFORM_EXT "Unix")
+else()
+    set(PLATFORM_EXT "ifyouseethisinanerrormessagethanyourplatformisnotsupported")
+endif()
 
 
 add_subdirectory(src)
+
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+set(THIS_DUMB_VARIABLE "GAGAGA")
 
 option(BUILD_TESTS "<build the Ray Eater testing suite>" OFF)
 if (BUILD_TESTS)

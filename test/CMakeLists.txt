@@ -8,14 +8,6 @@ cmake_minimum_required(VERSION 3.10)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED True)
 
-if (WIN32)
-    set(PLATFORM_EXT "Win32")
-elseif(UNIX)
-    set(PLATFORM_EXT "Unix")
-else()
-    set(PLATFORM_EXT "NOT_SUPPORTED")
-endif()
-
 option(TEST_ROOT "<test-folder>" "Deliverable_1")
 
 message(STATUS "Platform Extension: ${PLATFORM_EXT}")
@@ -44,11 +36,10 @@ add_executable(RayEater_Tests
     ${SharedSourceFiles}
 )
 
-# add_custom_command(TARGET RayEater_Tests POST_BUILD        # Adds a post-build event to MyTest
-#     COMMAND ${CMAKE_COMMAND} -E copy_if_different  # which executes "cmake - E copy_if_different..."
-#         "${PROJECT_SOURCE_DIR}/build/test/Debug/RayEater_Tests.dll"      # <--this is in-file
-#         $<TARGET_FILE_DIR:RayEater>
-# )
+# Temporary, the bin folder will be for release builds in the future...
+set_target_properties(RayEater_Tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG ../../bin
+)
 
 # Since any part of the code may need testing, we make all
 # files available to the compiler.
