@@ -23,6 +23,13 @@ target_include_directories(RayEater PUBLIC
     "../include"
 ) #FIXME: THIS DOES NOT WORK FOR HEADER INCLUDES AAAAAAAH
 
+set(CMAKE_C_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O2")
+
+if (UNIX)
+    message(STATUS "AAAAAAAAAAAAAAAAAAAAAAAAHHHHHHHHH")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
+endif()
+
 set_target_properties(RayEater PROPERTIES
 	C_STANDARD 99
     C_STANDARD_REQUIRED YES
