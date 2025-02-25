@@ -1,7 +1,7 @@
 #ifndef PLATFORM_UTILS_H
 #define PLATFORM_UTILS_H
 
-#include "../types.h"
+#include "types.h"
 
 typedef struct TimeStamp {
     u16 day;
@@ -14,6 +14,6 @@ typedef struct TimeStamp {
     u16 year;
 } TimeStamp;
 
-TimeStamp systemTimeStamp();
+TimeStamp systemTimeStamp(void);
 
 #endif

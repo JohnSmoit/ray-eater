@@ -12,7 +12,7 @@
  * Despite it's name, gets the platform-dependent timestamp for
  * some reason.
  */
-TimeStamp helloDllHell() {
+TimeStamp helloDllHell(void) {
 	return systemTimeStamp();
 }
 
@@ -75,7 +75,7 @@ const char * getDllCurse(const char * message) {
 /* Returns a pre-built platform label string
 Intended to test CMAKE project generation
 */
-const char * getPlatformLabel() {
+const char * getPlatformLabel(void) {
 	return RAY_PLATFORM_LABEL; 
 }
 

@@ -3,7 +3,7 @@
 #include <windows.h>
 
 
-TimeStamp systemTimeStamp() {
+TimeStamp systemTimeStamp(void) {
     SYSTEMTIME time;
     GetSystemTime(&time);
 

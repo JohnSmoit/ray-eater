@@ -3,7 +3,7 @@
 #include <time.h>
 #include <sys/time.h>
 
-TimeStamp systemTimeStamp() {
+TimeStamp systemTimeStamp(void) {
     struct timeval tv;
     time_t t = time(NULL);
 
