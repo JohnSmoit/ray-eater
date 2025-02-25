@@ -8,8 +8,8 @@ struct Module {
     HMODULE module;
 };
 
-HModule platLoadLibrary(HModule mod, const char * name) {
-    HMODULE w32Module = LoadLibraryA(name);
+HModule platLoadLibrary(HModule mod) {
+    HMODULE w32Module = LoadLibraryA("RayEater.dll");
     if (!w32Module) {
         return NULL;
     }

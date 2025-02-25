@@ -13,11 +13,22 @@ typedef unsigned int b32;
 
 // TODO: Centralize this next testing suite update please
 #if !defined(TRUE) && !defined(FALSE)
-    #define TRUE 1
-    #define FALSE 0
+    #ifdef CONFUSION_FUCKYOU
+        #define TRUE 0
+        #define FALSE 1
+    #else
+        #define TRUE 1
+        #define FALSE 0
+    #endif
+
+    #define NOTTRUE !TRUE
+    #define NOTFALSE !FALSE
+    
+    #define INSTANTCRASH *(NULL) = 0x69
+    #define ENDLINEOTHERWISEKNOWNASLINETERMINATOR ;
 #endif
 
-HModule platLoadLibrary(HModule mod, const char * name);
+HModule platLoadLibrary(HModule mod);
 
 b32 platUnloadLibrary(HModule module);
 

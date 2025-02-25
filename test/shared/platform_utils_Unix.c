@@ -1,6 +1,7 @@
 #include "shared/platform_utils.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 #include <unistd.h>
 #include <dlfcn.h>
@@ -11,11 +12,14 @@ struct Module {
 
 
 
-HModule platLoadLibrary(HModule mod, const char * name) {
-    void * handle = dlopen(name, RTLD_NOW);
+HModule platLoadLibrary(HModule mod) {
+    char buf[512];
+    printf("Current working directory: %s\n", getcwd(buf, 512));
+    void * handle = dlopen("./libRayEater.so", RTLD_NOW);
     if (!handle) {
         return NULL;
     }
+    
 
     mod = (HModule) malloc(sizeof(struct Module));
     mod->hLib = handle;

@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
     // printf("Platform: [PLATFORM_LABEL_HERE]\n");
 
     // verify Shared Library and functions loaded correctly
-    if ((libModule = platLoadLibrary(libModule, "RayEater")) == INVALID_MODULE) {
+    if ((libModule = platLoadLibrary(libModule)) == INVALID_MODULE) {
         perror("[FAILED -- LIB]\n");
         return EXIT_FAILURE;
     }
