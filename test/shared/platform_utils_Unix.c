@@ -1,11 +1,15 @@
 #include "shared/platform_utils.h"
 
 #include <stdlib.h>
+
+#include <unistd.h>
 #include <dlfcn.h>
 
 struct Module {
     void * hLib;
 };
+
+
 
 HModule platLoadLibrary(HModule mod, const char * name) {
     void * handle = dlopen("RayEater.so", RTLD_LAZY);

@@ -1,7 +1,16 @@
+
+# binary and build/intermediate files
 build
 test/**/build
 test/**/bin
 bin
-CMakeFiles
-.vscode
 test_bin
+CMakeFiles
+
+# editor-specific stuff
+.vscode
+
+# clangd stuff
+compile_commands.json
+.clangd
+compile_commands/
