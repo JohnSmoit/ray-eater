@@ -25,13 +25,23 @@ endif()
 
 add_subdirectory(src)
 
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(THIS_DUMB_VARIABLE "GAGAGA")
 
 option(BUILD_TESTS "<build the Ray Eater testing suite>" OFF)
 if (BUILD_TESTS)
     add_subdirectory(test)
+
+    message(STATUS "Hopefully outputs are installed correctly!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+    install(TARGETS
+            RayEater
+            RayEater_Tests
+        CONFIGURATIONS
+            Debug
+        RUNTIME
+            DESTINATION ${CMAKE_SOURCE_DIR}/test_bin
+        LIBRARY
+            DESTINATION ${CMAKE_SOURCE_DIR}/test_bin
+    )
 endif()

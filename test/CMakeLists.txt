@@ -36,10 +36,6 @@ add_executable(RayEater_Tests
     ${SharedSourceFiles}
 )
 
-# Temporary, the bin folder will be for release builds in the future...
-set_target_properties(RayEater_Tests PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG ../../bin
-)
 
 # Since any part of the code may need testing, we make all
 # files available to the compiler.
