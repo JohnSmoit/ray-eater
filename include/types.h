@@ -15,7 +15,7 @@ typedef int64_t i64;
 typedef uint8_t u8;
 typedef int8_t i8;
 
-typedef size_t usize;
+typedef uint64_t usize;
 
 //TODO: Verify that these are consistent across platforms
 typedef float f32;
