@@ -26,13 +26,9 @@ endif()
 add_subdirectory(src)
 
 
-set(THIS_DUMB_VARIABLE "GAGAGA")
-
 option(BUILD_TESTS "<build the Ray Eater testing suite>" OFF)
 if (BUILD_TESTS)
     add_subdirectory(test)
-
-    message(STATUS "Hopefully outputs are installed correctly!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
     install(TARGETS
             RayEater
@@ -40,8 +36,8 @@ if (BUILD_TESTS)
         CONFIGURATIONS
             Debug
         RUNTIME
-            DESTINATION ${CMAKE_SOURCE_DIR}/test_bin
+            DESTINATION ${CMAKE_SOURCE_DIR}/bin/test
         LIBRARY
-            DESTINATION ${CMAKE_SOURCE_DIR}/test_bin
+            DESTINATION ${CMAKE_SOURCE_DIR}/bin/test
     )
 endif()
