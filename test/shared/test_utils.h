@@ -13,8 +13,6 @@ inline void ray_assert(b32 expr, const char * label) {
 
         exit(EXIT_FAILURE);
     }
-
-    printf("Test assertion succeeded!\n");
 }
 
 #endif

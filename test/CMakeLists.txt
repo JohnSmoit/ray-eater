@@ -58,6 +58,7 @@ target_link_libraries(RayEater_Tests PUBLIC RayEater)
 foreach(test ${TEST_SOURCES})
     get_filename_component(TEST_FILE_NAME ${test} NAME_WE)
     get_filename_component(TEST_FILE_DIR ${test} DIRECTORY)
+
     set(TEST_NAME "${TEST_FILE_DIR}/${TEST_FILE_NAME}")
     message(STATUS "Adding Test ${TEST_NAME} -- file ${test}!")
     add_test(NAME ${TEST_NAME} COMMAND RayEater_Tests ${TEST_NAME})
@@ -67,9 +68,9 @@ endforeach()
 # Since any part of the code may need testing, we make all
 # files available to the compiler.
 target_include_directories(RayEater_Tests PUBLIC
-    "./"
-    "../include/"
-    "../src/lib/"
-    "../src/rsh/"
+    "${CMAKE_SOURCE_DIR}/test"
+    "${CMAKE_SOURCE_DIR}/include/"
+    "${CMAKE_SOURCE_DIR}/src/lib/"
+    "${CMAKE_SOURCE_DIR}/src/rsh/"
 )
 
