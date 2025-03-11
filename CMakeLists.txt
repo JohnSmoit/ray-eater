@@ -40,4 +40,9 @@ if (BUILD_TESTS)
         LIBRARY
             DESTINATION ${CMAKE_SOURCE_DIR}/bin/test
     )
+
+    install(FILES 
+        "${CMAKE_SOURCE_DIR}/build/test/CTestTestFile.cmake"
+        DESTINATION ${CMAKE_SOURCE_DIR}/bin/test
+    )
 endif()
