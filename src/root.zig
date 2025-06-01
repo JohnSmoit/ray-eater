@@ -6,5 +6,5 @@ const vk = @import("vulkan");
 // bare bones test to see if I package managed vulkan correctly ;(
 pub fn testInstance() !void {
     const poop = vk.makeApiVersion(1, 2, 1, 2);
-    std.debug.print("Test version packed: {d}", .{@as(@typeInfo(vk.Version).@"struct".backing_integer.?, @bitCast(poop))});
+    std.debug.print("Test version packed: {d}\n", .{@as(@typeInfo(vk.Version).@"struct".backing_integer.?, @bitCast(poop))});
 }

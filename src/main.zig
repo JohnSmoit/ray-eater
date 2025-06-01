@@ -3,23 +3,39 @@ const ray = @import("ray");
 
 const glfw = @import("glfw.zig");
 
+const Window = glfw.Window;
 pub fn main() !void {
 
-    if (glfw.glfwInit() != glfw.GLFW_TRUE) return error.GLFWInitFailed;
-    defer glfw.glfwTerminate();
+    glfw.init() catch |err| {
+        std.debug.print("Failed to initialize GLFW\n", .{});
+        return err;
+    };
+    defer glfw.terminate();
+    
+    Window.hints(.{
+        .{ glfw.CLIENT_API, glfw.NO_API },
+        .{ glfw.RESIZABLE, glfw.FALSE },
+    });
 
-    const window = glfw.glfwCreateWindow(900, 600, "Test Window", null, null) orelse return error.GLFWWindowFailed;
-    defer glfw.glfwDestroyWindow(window);
+    var window = Window.create(900, 600, "Test Window", null, null) catch |err| {
+        std.debug.print("Failed to create GLFW Window\n", .{});
+        return err;
+    };
+    defer window.destroy();
 
     // barebones package manager test -- will replace with proper testing suites later I guess
-    if (glfw.glfwVulkanSupported() != glfw.GLFW_TRUE) {
-        std.debug.print("Could not load Vulkan", .{});
-    }
+    glfw.vulkanSupported() catch |err| {
+        std.debug.print("Could not load Vulkan\n", .{});
+        return err;
+    };
+
     try ray.testInstance();
-    while (glfw.glfwWindowShouldClose(window) != glfw.GLFW_TRUE) {
+
+    while (!window.shouldClose()) {
         glfw.glfwPollEvents();
     }
 
+    std.debug.print("You win!\n",.{});
 }
 
 
