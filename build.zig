@@ -21,6 +21,10 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const vulkan_mod = b.dependency("vulkan",.{
+        .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml")
+    }).module("vulkan-zig");
+
     // module definition for the temporary test application
     // This is only intended to exist during early development/prototyping to
     // speed up smoke and fuzz testing 
@@ -31,6 +35,7 @@ pub fn build(b: *std.Build) void {
     });
 
     app_mod.addImport("ray", lib_mod);
+    lib_mod.addImport("vulkan", vulkan_mod);
 
     const lib = b.addLibrary(.{
         .linkage = .static,

@@ -2,12 +2,9 @@
 //! you are making an executable, the convention is to delete this file and
 //! start with main.zig instead.
 const std = @import("std");
-const testing = std.testing;
-
-pub export fn add(a: i32, b: i32) i32 {
-    return a + b;
-}
-
-test "basic add functionality" {
-    try testing.expect(add(3, 7) == 10);
+const vk = @import("vulkan");
+// bare bones test to see if I package managed vulkan correctly ;(
+pub fn testInstance() !void {
+    const poop = vk.makeApiVersion(1, 2, 1, 2);
+    std.debug.print("Test version packed: {d}", .{@as(@typeInfo(vk.Version).@"struct".backing_integer.?, @bitCast(poop))});
 }
