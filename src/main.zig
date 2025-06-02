@@ -4,6 +4,8 @@ const ray = @import("ray");
 const glfw = @import("glfw.zig");
 
 const Window = glfw.Window;
+
+
 pub fn main() !void {
 
     glfw.init() catch |err| {
@@ -11,6 +13,7 @@ pub fn main() !void {
         return err;
     };
     defer glfw.terminate();
+    errdefer glfw.terminate();
     
     Window.hints(.{
         .{ glfw.CLIENT_API, glfw.NO_API },
@@ -23,17 +26,26 @@ pub fn main() !void {
     };
     defer window.destroy();
 
-    // barebones package manager test -- will replace with proper testing suites later I guess
     glfw.vulkanSupported() catch |err| {
         std.debug.print("Could not load Vulkan\n", .{});
         return err;
     };
 
-    try ray.testInstance();
+    // apparently GeneralPurposeAllocator is deprecated so I guess I'll try this one? 
+    var gpa = std.heap.DebugAllocator(.{}).init;
+
+    ray.setLoaderFunction(glfw.glfwGetInstanceProcAddress);
+
+    var extensionCount: u32 = undefined;
+    ray.setRequiredExtensions(@ptrCast(glfw.getRequiredInstanceExtensions(&extensionCount)[0..extensionCount]));
+    try ray.testInit(gpa.allocator());
 
     while (!window.shouldClose()) {
-        glfw.glfwPollEvents();
+        glfw.pollEvents();
+        try ray.testLoop();
     }
+
+    ray.testDeinit();
 
     std.debug.print("You win!\n",.{});
 }

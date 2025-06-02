@@ -16,7 +16,7 @@ pub fn build(b: *std.Build) void {
     // module definition for the Ray Eater Library
     // All of the actual "meat" of the renderer is in the library
     const lib_mod = b.createModule(.{
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = b.path("src/ray/root.zig"),
         .target = target,
         .optimize = optimize,
     });

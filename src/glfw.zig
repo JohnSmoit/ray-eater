@@ -2,6 +2,11 @@ const c = @cImport({
     @cInclude("GLFW/glfw3.h");
 });
 
+// as much as I was hoping things would stay modularized early on,
+// we unfortunately need to know what a VkInstance is in order to be able to 
+// manually import GLFW's loader function, which means gross type exports for the time being...
+const ray = @import("ray");
+
 pub const TRUE = c.GLFW_TRUE;
 pub const FALSE = c.GLFW_FALSE;
 
@@ -13,9 +18,10 @@ pub const RESIZABLE = c.GLFW_RESIZABLE;
 
 pub const GLFWwindow = c.GLFWwindow;
 
-fn ErrorOnFalse(comptime func: fn() callconv(.c) c_int, comptime set: type, err: set) (fn() set!void) {
+fn ErrorOnFalse(comptime func: fn() callconv(.c) c_int, comptime err: anytype) (fn() @TypeOf(err)!void) {
+    const errorSetType = @TypeOf(err);
     const wrapperType = struct {
-        pub fn wrapper() set!void {
+        pub fn wrapper() errorSetType!void {
             switch(func()) {
                 FALSE => return err,
                 else => return
@@ -26,12 +32,14 @@ fn ErrorOnFalse(comptime func: fn() callconv(.c) c_int, comptime set: type, err:
     return wrapperType.wrapper;
 }
 
-pub const init = ErrorOnFalse(c.glfwInit, error {GLFWInitFailed}, error.GLFWInitFailed);
+pub extern fn glfwGetInstanceProcAddress(instance: ray.VkInstance, name: [*:0]const u8) ray.VkPfnVoidFunction;
+
+pub const init = ErrorOnFalse(c.glfwInit, error.GLFWInitFailed);
 pub const terminate = c.glfwTerminate;
-pub const vulkanSupported = ErrorOnFalse(c.glfwVulkanSupported, error {VulkanUnsupported}, error.VulkanUnsupported);
-pub const glfwGetRequiredInstanceExtensions = c.glfwGetRequiredInstanceExtensions;
-pub const glfwGetFramebufferSize = c.glfwGetFramebufferSize;
-pub const glfwPollEvents = c.glfwPollEvents;
+pub const vulkanSupported = ErrorOnFalse(c.glfwVulkanSupported, error.VulkanUnsupported);
+pub const getRequiredInstanceExtensions = c.glfwGetRequiredInstanceExtensions;
+pub const getFramebufferSize = c.glfwGetFramebufferSize;
+pub const pollEvents = c.glfwPollEvents;
 
 const glfwDestroyWindow = c.glfwDestroyWindow;
 const glfwWindowShouldClose = c.glfwWindowShouldClose;
