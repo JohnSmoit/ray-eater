@@ -69,8 +69,9 @@ pub const Context = struct {
     w_db: BaseWrapper,
     w_di: InstanceWrapper,
     w_dd: DeviceWrapper,
-
-
+    
+    //temporary global allocator used for all object instantiation
+    allocator: Allocator,
 
     fn defaultDebugConfig() vk.DebugUtilsMessengerCreateInfoEXT {
         return .{  
@@ -168,12 +169,16 @@ pub const Context = struct {
 
     pub fn init(config: *const ContextConfig) !Context {
         var ctx: Context = undefined;
+        ctx.allocator = config.allocator;
 
         try ctx.loadBase(config);
         try ctx.createInstance(config);
         errdefer ctx.pr_inst.destroyInstance(null);
 
         try ctx.createDebugMessenger();
+        errdefer ctx.pr_inst.destroyDebugUtilsMessengerEXT(ctx.h_dmsg, null);
+
+        _ = try Device.init(&ctx);
         
         return ctx;
     }
@@ -189,8 +194,83 @@ pub const Context = struct {
 };
 
 pub const Device = struct {
+    
+    const FamilyIndices = struct {
+        graphics_family: ?u32,
+        present_family: ?u32,
+    };
+    
+    ctx: *const Context,
 
-    pub fn init() !Device {
+    fn getQueueFamilies(dev: vk.PhysicalDevice, pr_inst: *const vk.InstanceProxy, allocator: Allocator) FamilyIndices {
+        var found_indices: FamilyIndices = .{
+            .graphics_family = null,
+            .present_family = null,
+        };
+
+        const dev_queue_family_props = pr_inst.getPhysicalDeviceQueueFamilyPropertiesAlloc(
+            dev,
+            allocator
+        ) catch {
+            return found_indices;
+        };
+
+
+        for (dev_queue_family_props, 0..) |props, index| {
+            if (props.queue_flags.contains(.{
+                .graphics_bit = true,
+            })) {
+                found_indices.graphics_family = @intCast(index);
+            }
+
+            //TODO: query for present-compatible queues as well
+        }
+
+        return found_indices;
+    }
+
+    fn pickSuitablePhysicalDevice(pr_inst: *const vk.InstanceProxy, allocator: Allocator) ?vk.PhysicalDevice {
+        const physical_devices = pr_inst.enumeratePhysicalDevicesAlloc(allocator) catch |err| {
+            std.debug.print("[DEVICE]: Encountered Error enumerating available physical devices: {!}\n", .{err});
+            return null;
+        };
         
+        var chosen_dev: ?vk.PhysicalDevice = null;
+        for (physical_devices) |dev| {
+            const dev_properties = pr_inst.getPhysicalDeviceProperties(dev);
+            std.debug.print(
+                \\[DEVICE]: Found Device Named {s}
+                \\    ID: {d}
+                \\    Type: {d} 
+                \\
+            , .{
+                dev_properties.device_name, 
+                dev_properties.device_id, 
+                dev_properties.device_type});
+
+            const dev_queue_indices = getQueueFamilies(dev, pr_inst, allocator);
+            
+            if (dev_queue_indices.graphics_family != null) {
+                std.debug.print("[DEVICE]: Chose device named {s}\n", .{dev_properties.device_name});
+                chosen_dev = dev;
+
+                break;
+            }
+        }
+
+        return chosen_dev;
+    }
+
+    // Later on, I plan to accept a device properties struct
+    // which shall serve as the criteria for choosing a graphics unit
+    pub fn init(parent: *const Context) !Device {
+        // attempt to find a suitable device -- hardcoded for now
+        const chosen_dev = pickSuitablePhysicalDevice(&parent.pr_inst, parent.allocator) orelse {
+            std.debug.print("[DEVICE]: Failed to find suitable device\n", .{});
+            return error.NoSuitableDevice;
+        };
+
+        _ = chosen_dev;
+        return undefined; // Haven't finished logical device creation yet...
     } 
 };
