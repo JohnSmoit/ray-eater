@@ -17,8 +17,6 @@ const DeviceWrapper = vk.DeviceWrapper;
 // Proxies in this context refer to a pairing of a wrapper type and a corresponding Vulkan Handle
 // (i.e InstanceProxy for InstanceWrapper). Wrapper functions are automatcally passed their paired handle object
 // so this is really a convenience layer since so many vulkan API functions fall into the 3 wrapper families
-const Instance = vk.InstanceProxy;
-const Device = vk.DeviceProxy;
 
 const Allocator = std.mem.Allocator;
 
@@ -27,17 +25,17 @@ pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0] const u8) callconv
 
 pub const ContextConfig = struct {
     instance: struct {
-        requiredExtensions: []const [*:0]const u8,
-        validationLayers: []const [*:0]const u8,
+        required_extensions: []const [*:0]const u8,
+        validation_layers: []const [*:0]const u8,
     },
 
     device: struct {
-        requiredExtensions: []const [*:0]const u8,
+        required_extensions: []const [*:0]const u8,
     },
 
     loader: GetProcAddrHandler,
     allocator: Allocator,
-    enableDebugMessenger: bool,
+    enable_debug_log: bool,
 };
 
 fn debugCallback(
@@ -62,8 +60,8 @@ fn debugCallback(
 // use a bunch of bullshit global state to test VkInstance creation
 pub const Context = struct {
 
-    pr_inst: Instance,
-    pr_dev: Device,
+    pr_inst: vk.InstanceProxy,
+    pr_dev: vk.DeviceProxy,
 
     h_dmsg: vk.DebugUtilsMessengerEXT,
     
@@ -113,7 +111,7 @@ pub const Context = struct {
             std.debug.print("Available Layer: {s}\n", .{cLn});
         }
         
-        for (config.instance.validationLayers) |wl| {
+        for (config.instance.validation_layers) |wl| {
             var found = false;
 
             for (availableLayers) |*al| {
@@ -128,7 +126,7 @@ pub const Context = struct {
         }
 
         // TODO: Conditionally enable validation layers/logging based on config property
-        // if (config.enableDebugMessenger) {
+        // if (config.enable_debug_log) {
         // }
 
         // TODO: make sure our wanted extensions are available
@@ -142,16 +140,16 @@ pub const Context = struct {
                 .api_version = @bitCast(vk.API_VERSION_1_4),
             },
             .p_next = &defaultDebugConfig(),
-            .enabled_extension_count = @intCast(config.instance.requiredExtensions.len),
-            .pp_enabled_extension_names = config.instance.requiredExtensions.ptr,
-            .enabled_layer_count = @intCast(config.instance.validationLayers.len),
-            .pp_enabled_layer_names = config.instance.validationLayers.ptr,
+            .enabled_extension_count = @intCast(config.instance.required_extensions.len),
+            .pp_enabled_extension_names = config.instance.required_extensions.ptr,
+            .enabled_layer_count = @intCast(config.instance.validation_layers.len),
+            .pp_enabled_layer_names = config.instance.validation_layers.ptr,
             .flags = .{.enumerate_portability_bit_khr = true},
         }, null);
 
         self.w_di = InstanceWrapper.load(instance, self.w_db.dispatch.vkGetInstanceProcAddr orelse return error.MissingDispatchFunc);
 
-        self.pr_inst = Instance.init(instance, &self.w_di);
+        self.pr_inst = vk.InstanceProxy.init(instance, &self.w_di);
     }
 
     fn createDebugMessenger(self: *Context) !void {
@@ -188,4 +186,11 @@ pub const Context = struct {
 
         self.pr_inst.destroyInstance(null);
     }
+};
+
+pub const Device = struct {
+
+    pub fn init() !Device {
+        
+    } 
 };

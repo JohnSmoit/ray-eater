@@ -47,11 +47,11 @@ pub fn testInit(allocator: Allocator) !void {
         .loader = loader,
         .allocator = allocator,
         .instance = .{
-            .requiredExtensions = @ptrCast(extensions.items[0..]),
-            .validationLayers = &validationLayers,
+            .required_extensions = @ptrCast(extensions.items[0..]),
+            .validation_layers = &validationLayers,
         },
         .device = undefined,
-        .enableDebugMessenger = true,
+        .enable_debug_log = true,
     });
 }
 
