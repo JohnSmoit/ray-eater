@@ -88,7 +88,10 @@ pub const Context = struct {
     fn createInstance(self: *Context, config: *const ContextConfig) !void {
 
         // log the available extensions
-        const available = self.w_db.enumerateInstanceExtensionPropertiesAlloc(null, config.allocator) catch {
+        const available = self.w_db.enumerateInstanceExtensionPropertiesAlloc(
+            null,
+            config.allocator,
+        ) catch {
             std.debug.print("Failed to enumerate extension properties... this is probably bad.\n", .{});
             return error.ExtensionEnumerationFailed;
         };
@@ -143,13 +146,20 @@ pub const Context = struct {
             .flags = .{ .enumerate_portability_bit_khr = true },
         }, null);
 
-        self.w_di = vk.InstanceWrapper.load(instance, self.w_db.dispatch.vkGetInstanceProcAddr orelse return error.MissingDispatchFunc);
+        self.w_di = vk.InstanceWrapper.load(
+            instance,
+            self.w_db.dispatch.vkGetInstanceProcAddr orelse
+                return error.MissingDispatchFunc,
+        );
 
         self.pr_inst = vk.InstanceProxy.init(instance, &self.w_di);
     }
 
     fn createDebugMessenger(self: *Context) !void {
-        self.h_dmsg = try self.pr_inst.createDebugUtilsMessengerEXT(&defaultDebugConfig(), null);
+        self.h_dmsg = try self.pr_inst.createDebugUtilsMessengerEXT(
+            &defaultDebugConfig(),
+            null,
+        );
     }
 
     fn loadBase(self: *Context, config: *const ContextConfig) !void {
@@ -205,15 +215,23 @@ pub const Device = struct {
     pr_dev: vk.DeviceProxy,
     dev_wrapper: *vk.DeviceWrapper,
 
-    fn getQueueFamilies(dev: vk.PhysicalDevice, pr_inst: *const vk.InstanceProxy, allocator: Allocator) FamilyIndices {
+    fn getQueueFamilies(
+        dev: vk.PhysicalDevice,
+        pr_inst: *const vk.InstanceProxy,
+        allocator: Allocator,
+    ) FamilyIndices {
         var found_indices: FamilyIndices = .{
             .graphics_family = null,
             .present_family = null,
         };
 
-        const dev_queue_family_props = pr_inst.getPhysicalDeviceQueueFamilyPropertiesAlloc(dev, allocator) catch {
-            return found_indices;
-        };
+        const dev_queue_family_props =
+            pr_inst.getPhysicalDeviceQueueFamilyPropertiesAlloc(
+                dev,
+                allocator,
+            ) catch {
+                return found_indices;
+            };
 
         for (dev_queue_family_props, 0..) |props, index| {
             if (props.queue_flags.contains(.{
@@ -228,11 +246,18 @@ pub const Device = struct {
         return found_indices;
     }
 
-    fn pickSuitablePhysicalDevice(pr_inst: *const vk.InstanceProxy, allocator: Allocator) ?vk.PhysicalDevice {
-        const physical_devices = pr_inst.enumeratePhysicalDevicesAlloc(allocator) catch |err| {
-            std.debug.print("[DEVICE]: Encountered Error enumerating available physical devices: {!}\n", .{err});
-            return null;
-        };
+    fn pickSuitablePhysicalDevice(
+        pr_inst: *const vk.InstanceProxy,
+        allocator: Allocator,
+    ) ?vk.PhysicalDevice {
+        const physical_devices =
+            pr_inst.enumeratePhysicalDevicesAlloc(allocator) catch |err| {
+                std.debug.print(
+                    "[DEVICE]: Encountered Error enumerating available physical devices: {!}\n",
+                    .{err},
+                );
+                return null;
+            };
 
         var chosen_dev: ?vk.PhysicalDevice = null;
         for (physical_devices) |dev| {
@@ -261,7 +286,10 @@ pub const Device = struct {
     // which shall serve as the criteria for choosing a graphics unit
     pub fn init(parent: *const Context) !Device {
         // attempt to find a suitable device -- hardcoded for now
-        const chosen_dev = pickSuitablePhysicalDevice(&parent.pr_inst, parent.allocator) orelse {
+        const chosen_dev = pickSuitablePhysicalDevice(
+            &parent.pr_inst,
+            parent.allocator,
+        ) orelse {
             std.debug.print("[DEVICE]: Failed to find suitable device\n", .{});
             return error.NoSuitableDevice;
         };
