@@ -57,13 +57,13 @@ pub const Context = struct {
     // API dispatch tables
 
     w_db: vk.BaseWrapper = undefined,
-    w_di: vk.InstanceWrapper = undefined,
+    w_di: *vk.InstanceWrapper = undefined,
 
     // for some reason if I remove this field, the program builds but segfaults when the deinit function is called,
     // This is despite the fact that I do not reference this field at all anywhere...
     // Baby's first compiler bug? -- Will look into this later...
-    w_dd: vk.DeviceWrapper = undefined, // I think I may have discovered a compiler bug relating to this field
     //temporary global allocator used for all object instantiation
+    // Further investigation makes me think this is some weird asfuck case of undefined behavior
     allocator: Allocator = undefined,
 
     dev: Device = undefined,
@@ -96,10 +96,10 @@ pub const Context = struct {
             return error.ExtensionEnumerationFailed;
         };
 
-        std.debug.print("Available Extensions:\n", .{});
+        std.debug.print("[INSTANCE]: Available Extensions:\n", .{});
         for (available) |ext| {
             const en = util.asCString(&ext.extension_name);
-            std.debug.print("Extension: {s}\n", .{en});
+            std.debug.print("[INSTANCE]: Extension: {s}\n", .{en});
         }
 
         // make sure the requested validation layers are available
@@ -146,13 +146,20 @@ pub const Context = struct {
             .flags = .{ .enumerate_portability_bit_khr = true },
         }, null);
 
-        self.w_di = vk.InstanceWrapper.load(
+        self.w_di = try self.allocator.create(vk.InstanceWrapper);
+        errdefer self.allocator.destroy(self.w_di);
+
+        self.w_di.* = vk.InstanceWrapper.load(
             instance,
             self.w_db.dispatch.vkGetInstanceProcAddr orelse
                 return error.MissingDispatchFunc,
         );
 
-        self.pr_inst = vk.InstanceProxy.init(instance, &self.w_di);
+        // self.w_di = instance_wrapper;
+        std.debug.print("[INSTANCE]: Is dispatch entry null: {s}\n", .{
+            if (self.w_di.dispatch.vkDestroyDebugUtilsMessengerEXT != null) "no" else "yes",
+        });
+        self.pr_inst = vk.InstanceProxy.init(instance, self.w_di);
     }
 
     fn createDebugMessenger(self: *Context) !void {
@@ -180,6 +187,7 @@ pub const Context = struct {
         try ctx.loadBase(config);
         try ctx.createInstance(config);
         errdefer ctx.pr_inst.destroyInstance(null);
+        errdefer ctx.allocator.destroy(ctx.w_di);
 
         try ctx.createDebugMessenger();
         errdefer ctx.pr_inst.destroyDebugUtilsMessengerEXT(ctx.h_dmsg, null);
@@ -193,19 +201,29 @@ pub const Context = struct {
     pub fn deinit(self: *Context) void {
         self.dev.deinit();
 
+        std.debug.print("[INSTANCE]: Is dispatch entry null: {s}\n", .{
+            if (self.pr_inst.wrapper.dispatch.vkDestroyDebugUtilsMessengerEXT != null) "no" else "yes",
+        });
+
         self.pr_inst.destroyDebugUtilsMessengerEXT(
             self.h_dmsg,
             null,
         );
 
         self.pr_inst.destroyInstance(null);
+        self.allocator.destroy(self.w_di);
     }
 };
 
+// ====================================
+// ******* Logical Device API *********
+// ====================================
+
 pub const Device = struct {
     const FamilyIndices = struct {
-        graphics_family: ?u32,
-        present_family: ?u32,
+        graphics_family: ?u32 = null,
+        present_family: ?u32 = null,
+        compute_family: ?u32 = null,
     };
 
     ctx: *const Context,
@@ -343,7 +361,58 @@ pub const Device = struct {
     pub fn deinit(self: *Device) void {
         self.pr_dev.destroyDevice(null);
 
-        std.debug.print("[DEVICE]: Dispatch table address: {*}\n", .{self.dev_wrapper});
         self.ctx.allocator.destroy(self.dev_wrapper);
     }
+
+    fn getQueueHandle(self: *const Device, family: QueueFamily) ?vk.Queue {
+        const family_index = switch (family) {
+            .Graphics => self.families.graphics_family orelse return null,
+            .Present => self.families.present_family orelse return null,
+            .Compute => self.families.compute_family orelse return null,
+        };
+
+        return self.pr_dev.getDeviceQueue(family_index, 0);
+    }
 };
+
+// ==================================
+// ******* Device Queue API *********
+// ==================================
+pub const QueueFamily = enum {
+    Graphics,
+    Present,
+    Compute,
+};
+
+pub fn GenericQueue(comptime p_family: QueueFamily) type {
+    return struct {
+        const family = p_family;
+        pub const Self = @This();
+
+        h_queue: vk.Queue,
+        dev: *const Device,
+
+        pub fn init(dev: *const Device) !Self {
+            // hardcode to graphics queue for now
+            const queue_handle = dev.getQueueHandle(family) orelse {
+                std.debug.print("[QUEUE]: Failed to acquire Queue handle\n", .{});
+                return error.MissingQueueHandle;
+            };
+
+            return .{
+                .h_queue = queue_handle,
+                .dev = dev,
+            };
+        }
+
+        pub fn deinit(self: *Self) void {
+            // TODO: Annihilate queue
+
+            _ = self;
+        }
+    };
+}
+
+pub const GraphicsQueue = GenericQueue(.Graphics);
+pub const PresentQueue = GenericQueue(.Present);
+pub const ComputeQueue = GenericQueue(.Compute);

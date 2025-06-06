@@ -15,24 +15,23 @@ pub const VkPfnVoidFunction = api.VkPfnVoidFunction;
 const Allocator = std.mem.Allocator;
 
 // use a bunch of bullshit global state to test VkInstance creation
-pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0] const u8) callconv(.c) vk.PfnVoidFunction);
+pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0]const u8) callconv(.c) vk.PfnVoidFunction);
 
 // vulkan loader function (i.e glfwGetProcAddress) in charge of finding vulkan API symbols in the first place
 // (since all linking is of the runtime dynamic variety)
 var loaderFunction: ?GetProcAddrHandler = null;
 
-var externalExtensions: [][*:0]const u8 = undefined; 
+var externalExtensions: [][*:0]const u8 = undefined;
 
 var context: api.Context = undefined;
 
-const validationLayers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"}; 
+var graphics_queue: api.GraphicsQueue = undefined;
 
-
-
+const validationLayers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
 
 pub fn testInit(allocator: Allocator) !void {
     const loader = loaderFunction orelse return error.NoLoaderFunction;
-    
+
     var extensions = std.ArrayList([*:0]const u8).init(allocator);
     defer extensions.deinit();
 
@@ -53,6 +52,10 @@ pub fn testInit(allocator: Allocator) !void {
         .device = undefined,
         .enable_debug_log = true,
     });
+    errdefer context.deinit();
+
+    graphics_queue = try api.GraphicsQueue.init(&context.dev);
+    errdefer graphics_queue.deinit();
 }
 
 pub fn setLoaderFunction(func: GetProcAddrHandler) void {
@@ -63,13 +66,9 @@ pub fn setRequiredExtensions(names: [][*:0]const u8) void {
     externalExtensions = names;
 }
 
-pub fn testLoop() !void {
-    
-}
-
-
+pub fn testLoop() !void {}
 
 pub fn testDeinit() void {
+    graphics_queue.deinit();
     context.deinit();
-} 
-
+}
