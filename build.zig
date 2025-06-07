@@ -21,21 +21,38 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const vulkan_mod = b.dependency("vulkan",.{
-        .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml")
-    }).module("vulkan-zig");
+    const vulkan_mod = b.dependency("vulkan", .{ .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml") }).module("vulkan-zig");
 
     // module definition for the temporary test application
     // This is only intended to exist during early development/prototyping to
-    // speed up smoke and fuzz testing 
+    // speed up smoke and fuzz testing
     const app_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
 
+    const glfw_mod = b.createModule(.{
+        .root_source_file = b.path("src/glfw.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const glfw_dep = getGLFWDep(b);
+
     app_mod.addImport("ray", lib_mod);
+    app_mod.addImport("glfw", glfw_mod);
+
     lib_mod.addImport("vulkan", vulkan_mod);
+    lib_mod.addImport("glfw", glfw_mod);
+
+    glfw_mod.addObjectFile(glfw_dep.path("lib-mingw-w64/libglfw3.a"));
+    glfw_mod.addImport("vulkan", vulkan_mod);
+
+    glfw_mod.linkSystemLibrary("user32", .{});
+    glfw_mod.linkSystemLibrary("gdi32", .{});
+    glfw_mod.linkSystemLibrary("shell32", .{});
+    glfw_mod.addIncludePath(glfw_dep.path("include"));
 
     const lib = b.addLibrary(.{
         .linkage = .static,
@@ -48,17 +65,11 @@ pub fn build(b: *std.Build) void {
         .root_module = app_mod,
     });
 
-    // Link and install GLFW binaries
+    // temporary hard dep of GLFW to the library module, since I don't
+    // want to deal with all the platorm specific runtime dyn linking shit (yet)
 
-    app.linkSystemLibrary("user32");
-    app.linkSystemLibrary("gdi32");
-    app.linkSystemLibrary("shell32");
-    const glfw_dep = getGLFWDep(b);
-
-    app.addIncludePath(glfw_dep.path("include"));
-    app.addObjectFile(glfw_dep.path("lib-mingw-w64/libglfw3.a"));
-    
     app.linkLibC();
+
     b.installArtifact(lib);
     b.installArtifact(app);
 

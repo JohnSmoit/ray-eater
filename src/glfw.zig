@@ -3,9 +3,10 @@ const c = @cImport({
 });
 
 // as much as I was hoping things would stay modularized early on,
-// we unfortunately need to know what a VkInstance is in order to be able to 
+// we unfortunately need to know what a VkInstance is in order to be able to
 // manually import GLFW's loader function, which means gross type exports for the time being...
-const ray = @import("ray");
+
+const vk = @import("vulkan");
 
 pub const TRUE = c.GLFW_TRUE;
 pub const FALSE = c.GLFW_FALSE;
@@ -15,24 +16,23 @@ pub const CLIENT_API = c.GLFW_CLIENT_API;
 pub const NO_API = c.GLFW_NO_API;
 pub const RESIZABLE = c.GLFW_RESIZABLE;
 
-
 pub const GLFWwindow = c.GLFWwindow;
 
-fn ErrorOnFalse(comptime func: fn() callconv(.c) c_int, comptime err: anytype) (fn() @TypeOf(err)!void) {
+fn ErrorOnFalse(comptime func: fn () callconv(.c) c_int, comptime err: anytype) (fn () @TypeOf(err)!void) {
     const errorSetType = @TypeOf(err);
     const wrapperType = struct {
         pub fn wrapper() errorSetType!void {
-            switch(func()) {
+            switch (func()) {
                 FALSE => return err,
                 else => return
-            } 
+            }
         }
     };
 
     return wrapperType.wrapper;
 }
 
-pub extern fn glfwGetInstanceProcAddress(instance: ray.VkInstance, name: [*:0]const u8) ray.VkPfnVoidFunction;
+pub extern fn glfwGetInstanceProcAddress(instance: vk.Instance, name: [*:0]const u8) vk.PfnVoidFunction;
 
 pub const init = ErrorOnFalse(c.glfwInit, error.GLFWInitFailed);
 pub const terminate = c.glfwTerminate;
@@ -48,7 +48,7 @@ const glfwWindowHint = c.glfwWindowHint;
 
 pub const Window = struct {
     handle: *GLFWwindow,
-    
+
     pub fn destroy(self: *Window) void {
         glfwDestroyWindow(self.handle);
     }
@@ -58,9 +58,8 @@ pub const Window = struct {
     }
 
     pub fn create(width: c_int, height: c_int, title: [*c]const u8, monitor: ?*c.GLFWmonitor, share: ?*GLFWwindow) !Window {
-        return .{ 
-            .handle = glfwCreateWindow(width, height, title, monitor,  share)
-                orelse return error.WindowCreateFailed,
+        return .{
+            .handle = glfwCreateWindow(width, height, title, monitor, share) orelse return error.WindowCreateFailed,
         };
     }
 

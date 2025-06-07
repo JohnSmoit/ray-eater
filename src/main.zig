@@ -1,7 +1,7 @@
 const std = @import("std");
 const ray = @import("ray");
 
-const glfw = @import("glfw.zig");
+const glfw = @import("glfw");
 
 const Window = glfw.Window;
 
@@ -32,10 +32,9 @@ pub fn main() !void {
     // apparently GeneralPurposeAllocator is deprecated so I guess I'll try this one?
     var gpa = std.heap.DebugAllocator(.{}).init;
 
-    ray.setLoaderFunction(glfw.glfwGetInstanceProcAddress);
-
     var extensionCount: u32 = undefined;
     ray.setRequiredExtensions(@ptrCast(glfw.getRequiredInstanceExtensions(&extensionCount)[0..extensionCount]));
+    ray.setWindow(&window);
     try ray.testInit(gpa.allocator());
 
     while (!window.shouldClose()) {

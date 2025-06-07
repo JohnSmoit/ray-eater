@@ -2,6 +2,9 @@ const vk = @import("vulkan");
 const std = @import("std");
 const util = @import("../util.zig"); //TODO: avorelative id relative if possible
 
+// note: Yucky
+const glfw = @import("glfw");
+
 // =============================
 // ******* Context API *********
 // =============================
@@ -30,6 +33,7 @@ pub const ContextConfig = struct {
     },
 
     loader: GetProcAddrHandler,
+    window: *glfw.Window,
     allocator: Allocator,
     enable_debug_log: bool,
 };
@@ -65,8 +69,6 @@ pub const Context = struct {
     //temporary global allocator used for all object instantiation
     // Further investigation makes me think this is some weird asfuck case of undefined behavior
     allocator: Allocator = undefined,
-
-    dev: Device = undefined,
 
     fn defaultDebugConfig() vk.DebugUtilsMessengerCreateInfoEXT {
         return .{
@@ -192,15 +194,10 @@ pub const Context = struct {
         try ctx.createDebugMessenger();
         errdefer ctx.pr_inst.destroyDebugUtilsMessengerEXT(ctx.h_dmsg, null);
 
-        ctx.dev = try Device.init(&ctx);
-        errdefer ctx.dev.deinit();
-
         return ctx;
     }
 
     pub fn deinit(self: *Context) void {
-        self.dev.deinit();
-
         std.debug.print("[INSTANCE]: Is dispatch entry null: {s}\n", .{
             if (self.pr_inst.wrapper.dispatch.vkDestroyDebugUtilsMessengerEXT != null) "no" else "yes",
         });
@@ -231,7 +228,7 @@ pub const Device = struct {
 
     h_dev: vk.Device,
     pr_dev: vk.DeviceProxy,
-    dev_wrapper: *vk.DeviceWrapper,
+    dev_wrapper: *vk.DeviceWrapper = undefined,
 
     fn getQueueFamilies(
         dev: vk.PhysicalDevice,
@@ -347,6 +344,13 @@ pub const Device = struct {
             parent.w_di.dispatch.vkGetDeviceProcAddr.?,
         );
 
+        if (dev_wrapper.dispatch.vkDestroyDevice == null) {
+            std.debug.print("[DEVICE]: Failed to load dispatch table\n", .{});
+            return error.DispatchLoadingFailed;
+        } else {
+            std.debug.print("[DEVICE]: Dispatch loading successful\n", .{});
+        }
+
         const dev_proxy = vk.DeviceProxy.init(logical_dev, dev_wrapper);
 
         return Device{
@@ -359,9 +363,9 @@ pub const Device = struct {
     }
 
     pub fn deinit(self: *Device) void {
-        self.pr_dev.destroyDevice(null);
-
         self.ctx.allocator.destroy(self.dev_wrapper);
+
+        self.pr_dev.destroyDevice(null);
     }
 
     fn getQueueHandle(self: *const Device, family: QueueFamily) ?vk.Queue {

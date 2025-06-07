@@ -6,6 +6,7 @@ const api = @import("api/vulkan.zig");
 
 // Another nasty import to keep extension names intact
 const vk = @import("vulkan");
+const glfw = @import("glfw");
 
 // NOTE: Temporary disgusting type exports in favor of slapping something together quicky
 // please provide a custom loader function ASAP
@@ -19,23 +20,22 @@ pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0]const u8) callconv(
 
 // vulkan loader function (i.e glfwGetProcAddress) in charge of finding vulkan API symbols in the first place
 // (since all linking is of the runtime dynamic variety)
-var loaderFunction: ?GetProcAddrHandler = null;
 
-var externalExtensions: [][*:0]const u8 = undefined;
+var external_extensions: ?[][*:0]const u8 = null;
 
 var context: api.Context = undefined;
+var device: api.Device = undefined;
 
 var graphics_queue: api.GraphicsQueue = undefined;
+var window_handle: ?*glfw.Window = null;
 
-const validationLayers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
+const validation_layers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
 
 pub fn testInit(allocator: Allocator) !void {
-    const loader = loaderFunction orelse return error.NoLoaderFunction;
-
     var extensions = std.ArrayList([*:0]const u8).init(allocator);
     defer extensions.deinit();
 
-    try extensions.appendSlice(externalExtensions);
+    try extensions.appendSlice(external_extensions orelse &[0][*:0]const u8{});
     try extensions.appendSlice(&[_][*:0]const u8{
         vk.extensions.khr_portability_enumeration.name,
         vk.extensions.khr_get_physical_device_properties_2.name,
@@ -43,32 +43,38 @@ pub fn testInit(allocator: Allocator) !void {
     });
 
     context = try api.Context.init(&.{
-        .loader = loader,
+        .loader = glfw.glfwGetInstanceProcAddress,
         .allocator = allocator,
         .instance = .{
             .required_extensions = @ptrCast(extensions.items[0..]),
-            .validation_layers = &validationLayers,
+            .validation_layers = &validation_layers,
         },
         .device = undefined,
         .enable_debug_log = true,
+        .window = window_handle orelse {
+            return error.NoWindowSpecified;
+        },
     });
     errdefer context.deinit();
 
-    graphics_queue = try api.GraphicsQueue.init(&context.dev);
+    device = try api.Device.init(&context);
+
+    graphics_queue = try api.GraphicsQueue.init(&device);
     errdefer graphics_queue.deinit();
 }
 
-pub fn setLoaderFunction(func: GetProcAddrHandler) void {
-    loaderFunction = func;
+pub fn setWindow(window: *glfw.Window) void {
+    window_handle = window;
 }
 
 pub fn setRequiredExtensions(names: [][*:0]const u8) void {
-    externalExtensions = names;
+    external_extensions = names;
 }
 
 pub fn testLoop() !void {}
 
 pub fn testDeinit() void {
     graphics_queue.deinit();
+    device.deinit();
     context.deinit();
 }
