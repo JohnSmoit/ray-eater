@@ -97,6 +97,7 @@ pub const Context = struct {
             std.debug.print("Failed to enumerate extension properties... this is probably bad.\n", .{});
             return error.ExtensionEnumerationFailed;
         };
+        defer config.allocator.free(available);
 
         std.debug.print("[INSTANCE]: Available Extensions:\n", .{});
         for (available) |ext| {
@@ -106,6 +107,7 @@ pub const Context = struct {
 
         // make sure the requested validation layers are available
         const availableLayers = try self.w_db.enumerateInstanceLayerPropertiesAlloc(config.allocator);
+        defer config.allocator.free(availableLayers);
 
         for (availableLayers) |*al| {
             const cLn = util.asCString(&al.layer_name);
@@ -216,6 +218,10 @@ pub const Context = struct {
 // ******* Logical Device API *********
 // ====================================
 
+pub const DeviceConfig = struct {
+    surface: *const Surface,
+    required_extensions: []const [*:0]const u8 = &[0][*:0]const u8{},
+};
 pub const Device = struct {
     const FamilyIndices = struct {
         graphics_family: ?u32 = null,
@@ -226,13 +232,16 @@ pub const Device = struct {
     ctx: *const Context,
     families: FamilyIndices,
 
-    h_dev: vk.Device,
+    h_dev: vk.Device = .null_handle,
+    h_pdev: vk.PhysicalDevice = .null_handle,
+
     pr_dev: vk.DeviceProxy,
     dev_wrapper: *vk.DeviceWrapper = undefined,
 
     fn getQueueFamilies(
         dev: vk.PhysicalDevice,
         pr_inst: *const vk.InstanceProxy,
+        surface: *const Surface,
         allocator: Allocator,
     ) FamilyIndices {
         var found_indices: FamilyIndices = .{
@@ -247,15 +256,23 @@ pub const Device = struct {
             ) catch {
                 return found_indices;
             };
+        defer allocator.free(dev_queue_family_props);
 
         for (dev_queue_family_props, 0..) |props, index| {
+            const i: u32 = @intCast(index);
             if (props.queue_flags.contains(.{
                 .graphics_bit = true,
             })) {
-                found_indices.graphics_family = @intCast(index);
+                found_indices.graphics_family = i;
             }
 
-            //TODO: query for present-compatible queues as well
+            if ((pr_inst.getPhysicalDeviceSurfaceSupportKHR(
+                dev,
+                i,
+                surface.h_surface,
+            ) catch vk.FALSE) == vk.FALSE) {
+                found_indices.present_family = i;
+            }
         }
 
         return found_indices;
@@ -263,6 +280,7 @@ pub const Device = struct {
 
     fn pickSuitablePhysicalDevice(
         pr_inst: *const vk.InstanceProxy,
+        config: *const DeviceConfig,
         allocator: Allocator,
     ) ?vk.PhysicalDevice {
         const physical_devices =
@@ -273,9 +291,10 @@ pub const Device = struct {
                 );
                 return null;
             };
+        defer allocator.free(physical_devices);
 
         var chosen_dev: ?vk.PhysicalDevice = null;
-        for (physical_devices) |dev| {
+        dev_loop: for (physical_devices) |dev| {
             const dev_properties = pr_inst.getPhysicalDeviceProperties(dev);
             std.debug.print(
                 \\[DEVICE]: Found Device Named {s}
@@ -284,9 +303,25 @@ pub const Device = struct {
                 \\
             , .{ dev_properties.device_name, dev_properties.device_id, dev_properties.device_type });
 
-            const dev_queue_indices = getQueueFamilies(dev, pr_inst, allocator);
+            const dev_queue_indices = getQueueFamilies(dev, pr_inst, config.surface, allocator);
 
-            if (dev_queue_indices.graphics_family != null) {
+            // check to see if device supports presentation (it must or it crashes)
+            const supported_extensions = pr_inst.enumerateDeviceExtensionPropertiesAlloc(dev, null, allocator) catch &[0]vk.ExtensionProperties{};
+
+            ext_loop: for (config.required_extensions) |req| {
+                var found = false;
+
+                for (supported_extensions) |ext| {
+                    if (std.mem.orderZ(u8, @ptrCast(&ext.extension_name), req) == .eq) {
+                        found = true;
+                        break :ext_loop;
+                    }
+                }
+
+                if (!found) continue :dev_loop;
+            }
+
+            if (dev_queue_indices.graphics_family != null and dev_queue_indices.present_family != null) {
                 std.debug.print("[DEVICE]: Chose device named {s}\n", .{dev_properties.device_name});
                 chosen_dev = dev;
 
@@ -299,10 +334,11 @@ pub const Device = struct {
 
     // Later on, I plan to accept a device properties struct
     // which shall serve as the criteria for choosing a graphics unit
-    pub fn init(parent: *const Context) !Device {
+    pub fn init(parent: *const Context, config: *const DeviceConfig) !Device {
         // attempt to find a suitable device -- hardcoded for now
         const chosen_dev = pickSuitablePhysicalDevice(
             &parent.pr_inst,
+            config,
             parent.allocator,
         ) orelse {
             std.debug.print("[DEVICE]: Failed to find suitable device\n", .{});
@@ -312,24 +348,35 @@ pub const Device = struct {
         const dev_queue_indices = getQueueFamilies(
             chosen_dev,
             &parent.pr_inst,
+            config.surface,
             parent.allocator,
         );
 
         // just enable all the available features lmao
         const dev_features = parent.pr_inst.getPhysicalDeviceFeatures(chosen_dev);
 
+        const priority = [_]f32{1.0};
+
+        // Hardcode dem queues, although obviously imma want some more configuration later on...
         const queue_create_infos = [_]vk.DeviceQueueCreateInfo{
             .{
                 .queue_family_index = dev_queue_indices.graphics_family.?,
                 .queue_count = 1,
-                .p_queue_priorities = &[_]f32{1.0},
+                .p_queue_priorities = &priority,
+            },
+            .{
+                .queue_family_index = dev_queue_indices.present_family.?,
+                .queue_count = 1,
+                .p_queue_priorities = &priority,
             },
         };
 
         const logical_dev = parent.pr_inst.createDevice(chosen_dev, &.{
             .p_queue_create_infos = &queue_create_infos,
-            .queue_create_info_count = 1,
+            .queue_create_info_count = queue_create_infos.len,
             .p_enabled_features = @ptrCast(&dev_features),
+            .pp_enabled_extension_names = config.required_extensions.ptr,
+            .enabled_extension_count = @intCast(config.required_extensions.len),
         }, null) catch |err| {
             std.debug.print("[DEVICE]: Failed to initialize logical device: {!}\n", .{err});
             return error.LogicalDeviceFailed;
@@ -358,14 +405,15 @@ pub const Device = struct {
             .dev_wrapper = dev_wrapper,
             .pr_dev = dev_proxy,
             .h_dev = logical_dev,
+            .h_pdev = chosen_dev,
             .families = dev_queue_indices,
         };
     }
 
     pub fn deinit(self: *Device) void {
-        self.ctx.allocator.destroy(self.dev_wrapper);
-
         self.pr_dev.destroyDevice(null);
+
+        self.ctx.allocator.destroy(self.dev_wrapper);
     }
 
     fn getQueueHandle(self: *const Device, family: QueueFamily) ?vk.Queue {
@@ -417,6 +465,77 @@ pub fn GenericQueue(comptime p_family: QueueFamily) type {
     };
 }
 
+pub const Surface = struct {
+    h_window: *glfw.Window = undefined,
+    h_surface: vk.SurfaceKHR = .null_handle,
+    ctx: *const Context = undefined,
+
+    pub fn init(window: *glfw.Window, ctx: *const Context) !Surface {
+        var surface: vk.SurfaceKHR = undefined;
+
+        if (glfw.glfwCreateWindowSurface(ctx.pr_inst.handle, window, null, &surface) != .success) {
+            std.debug.print("[SURFACE]: Failed to create window surface!\n", .{});
+            return error.SurfaceCreationFailed;
+        }
+
+        return Surface{
+            .h_window = window,
+            .h_surface = surface,
+            .ctx = ctx,
+        };
+    }
+
+    pub fn deinit(self: *Surface) void {
+        self.ctx.pr_inst.destroySurfaceKHR(self.h_surface, null);
+    }
+};
+
 pub const GraphicsQueue = GenericQueue(.Graphics);
 pub const PresentQueue = GenericQueue(.Present);
 pub const ComputeQueue = GenericQueue(.Compute);
+
+// =================================================
+// ******* Swapchain Stuff *************************
+// =================================================
+
+pub const Swapchain = struct {
+    pub const Config = struct {
+        requested_formats: ?[]const []struct {
+            color_space: vk.ColorSpaceKHR,
+            format: vk.Format,
+        },
+        present_mode: vk.PresentModeKHR,
+    };
+
+    // technically, we'd want to ensure the device supports our requested swapchain
+    // operations before we choose it, but uuuuh Me lazy.. (TODO)
+    const SupportDetails = struct {
+        capabilities: vk.SurfaceCapabilitiesKHR = undefined,
+        formats: []vk.SurfaceFormatKHR = util.emptySlice(vk.SurfaceFormatKHR),
+        present_modes: []vk.PresentModeKHR = util.emptySlice(vk.PresentModeKHR),
+        allocator: ?Allocator,
+
+        pub fn deinit(self: *SupportDetails) void {
+            const allocator = self.allocator orelse return;
+
+            allocator.free(self.formats);
+            allocator.free(self.present_modes);
+        }
+    };
+
+    pub fn getDeviceSupport(ctx: *const Context, pdev: vk.PhysicalDevice, allocator: Allocator) !SupportDetails {
+        _ = ctx;
+        _ = pdev;
+        _ = allocator;
+
+        return undefined;
+        // return .{
+        //     .capabilities = ctx.pr_inst.getPhysicalDeviceSurfaceCapabilitiesKHR(pdev, )
+        // }
+    }
+
+    pub fn init(config: *const Config, device: *const Device) !Swapchain {
+        _ = config;
+        _ = device;
+    }
+};

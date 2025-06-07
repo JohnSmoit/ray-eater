@@ -25,11 +25,15 @@ var external_extensions: ?[][*:0]const u8 = null;
 
 var context: api.Context = undefined;
 var device: api.Device = undefined;
+var surface: api.Surface = undefined;
 
 var graphics_queue: api.GraphicsQueue = undefined;
+var present_queue: api.PresentQueue = undefined;
+
 var window_handle: ?*glfw.Window = null;
 
 const validation_layers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
+const device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
 
 pub fn testInit(allocator: Allocator) !void {
     var extensions = std.ArrayList([*:0]const u8).init(allocator);
@@ -57,10 +61,20 @@ pub fn testInit(allocator: Allocator) !void {
     });
     errdefer context.deinit();
 
-    device = try api.Device.init(&context);
+    surface = try api.Surface.init(window_handle.?, &context);
+    errdefer surface.deinit();
+
+    device = try api.Device.init(&context, &.{
+        .surface = &surface,
+        .required_extensions = &device_extensions,
+    });
+    errdefer device.deinit();
 
     graphics_queue = try api.GraphicsQueue.init(&device);
     errdefer graphics_queue.deinit();
+
+    present_queue = try api.PresentQueue.init(&device);
+    errdefer present_queue.deinit();
 }
 
 pub fn setWindow(window: *glfw.Window) void {
@@ -75,6 +89,8 @@ pub fn testLoop() !void {}
 
 pub fn testDeinit() void {
     graphics_queue.deinit();
+    present_queue.deinit();
+    surface.deinit();
     device.deinit();
     context.deinit();
 }
