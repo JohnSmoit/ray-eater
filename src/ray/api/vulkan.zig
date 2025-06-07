@@ -105,13 +105,17 @@ pub const Context = struct {
             std.debug.print("[INSTANCE]: Extension: {s}\n", .{en});
         }
 
+        for (config.instance.required_extensions) |req| {
+            std.debug.print("[INSTANCE]: Required -- {s}\n", .{req});
+        }
+
         // make sure the requested validation layers are available
         const availableLayers = try self.w_db.enumerateInstanceLayerPropertiesAlloc(config.allocator);
         defer config.allocator.free(availableLayers);
 
         for (availableLayers) |*al| {
             const cLn = util.asCString(&al.layer_name);
-            std.debug.print("Available Layer: {s}\n", .{cLn});
+            std.debug.print("[INSTANCE]: Available Layer: {s}\n", .{cLn});
         }
 
         for (config.instance.validation_layers) |wl| {
@@ -222,12 +226,65 @@ pub const DeviceConfig = struct {
     surface: *const Surface,
     required_extensions: []const [*:0]const u8 = &[0][*:0]const u8{},
 };
+
 pub const Device = struct {
     const FamilyIndices = struct {
         graphics_family: ?u32 = null,
         present_family: ?u32 = null,
         compute_family: ?u32 = null,
     };
+
+    pub const SwapchainSupportDetails = struct {
+        capabilities: vk.SurfaceCapabilitiesKHR = undefined,
+        formats: []vk.SurfaceFormatKHR = util.emptySlice(vk.SurfaceFormatKHR),
+        present_modes: []vk.PresentModeKHR = util.emptySlice(vk.PresentModeKHR),
+        allocator: ?Allocator,
+
+        pub fn deinit(self: *SwapchainSupportDetails) void {
+            const allocator = self.allocator orelse return;
+
+            allocator.free(self.formats);
+            allocator.free(self.present_modes);
+        }
+    };
+
+    /// ## Brief
+    /// deallocate everything returned from this function or I will murder you
+    ///
+    /// ## Other
+    /// also, I just realized that I'm kinda doin bad zig practice by making deez allocations sorta
+    /// implicit oops (Imma try and fix that later). TO be fair, all of this allocation shit
+    /// is sort of temporary anyhoo, since DebugAllocator is obviously not the way to go in production
+    pub fn getDeviceSupport(
+        pr_inst: *const vk.InstanceProxy,
+        surface: *const Surface,
+        pdev: vk.PhysicalDevice, //TODO: Optional -- Will use chosen physical device info if omitted
+        allocator: Allocator,
+    ) !SwapchainSupportDetails {
+        const formats = pr_inst.getPhysicalDeviceSurfaceFormatsAllocKHR(
+            pdev,
+            surface.h_surface,
+            allocator,
+        ) catch util.emptySlice(vk.SurfaceFormatKHR);
+        errdefer allocator.free(formats);
+
+        const present_modes = pr_inst.getPhysicalDeviceSurfacePresentModesAllocKHR(
+            pdev,
+            surface.h_surface,
+            allocator,
+        ) catch util.emptySlice(vk.PresentModeKHR);
+        errdefer allocator.free(present_modes);
+
+        return .{
+            .capabilities = try pr_inst.getPhysicalDeviceSurfaceCapabilitiesKHR(
+                pdev,
+                surface.h_surface,
+            ),
+            .formats = formats,
+            .present_modes = present_modes,
+            .allocator = allocator,
+        };
+    }
 
     ctx: *const Context,
     families: FamilyIndices,
@@ -306,7 +363,11 @@ pub const Device = struct {
             const dev_queue_indices = getQueueFamilies(dev, pr_inst, config.surface, allocator);
 
             // check to see if device supports presentation (it must or it crashes)
-            const supported_extensions = pr_inst.enumerateDeviceExtensionPropertiesAlloc(dev, null, allocator) catch &[0]vk.ExtensionProperties{};
+            const supported_extensions = pr_inst.enumerateDeviceExtensionPropertiesAlloc(
+                dev,
+                null,
+                allocator,
+            ) catch util.emptySlice(vk.ExtensionProperties);
 
             ext_loop: for (config.required_extensions) |req| {
                 var found = false;
@@ -318,12 +379,35 @@ pub const Device = struct {
                     }
                 }
 
-                if (!found) continue :dev_loop;
+                if (!found) {
+                    continue :dev_loop;
+                }
             }
 
-            if (dev_queue_indices.graphics_family != null and dev_queue_indices.present_family != null) {
-                std.debug.print("[DEVICE]: Chose device named {s}\n", .{dev_properties.device_name});
+            //NOTE: Ew
+            if (dev_queue_indices.graphics_family == null or dev_queue_indices.present_family == null) {
+                continue;
+            }
+
+            var dev_present_features = getDeviceSupport(
+                pr_inst,
+                config.surface,
+                dev,
+                allocator,
+            ) catch |err| {
+                std.debug.print("FUAUFAIFUEIAUFOAFUO: {!}\n", .{err});
+                continue;
+            };
+            defer dev_present_features.deinit();
+
+            if (dev_present_features.formats.len != 0 and dev_present_features.present_modes.len != 0) {
                 chosen_dev = dev;
+                std.debug.print(
+                    \\[DEVICE]: Chose Device Named {s}
+                    \\    ID: {d}
+                    \\    Type: {d} 
+                    \\
+                , .{ dev_properties.device_name, dev_properties.device_id, dev_properties.device_type });
 
                 break;
             }
@@ -507,35 +591,13 @@ pub const Swapchain = struct {
         present_mode: vk.PresentModeKHR,
     };
 
-    // technically, we'd want to ensure the device supports our requested swapchain
-    // operations before we choose it, but uuuuh Me lazy.. (TODO)
-    const SupportDetails = struct {
-        capabilities: vk.SurfaceCapabilitiesKHR = undefined,
-        formats: []vk.SurfaceFormatKHR = util.emptySlice(vk.SurfaceFormatKHR),
-        present_modes: []vk.PresentModeKHR = util.emptySlice(vk.PresentModeKHR),
-        allocator: ?Allocator,
-
-        pub fn deinit(self: *SupportDetails) void {
-            const allocator = self.allocator orelse return;
-
-            allocator.free(self.formats);
-            allocator.free(self.present_modes);
-        }
-    };
-
-    pub fn getDeviceSupport(ctx: *const Context, pdev: vk.PhysicalDevice, allocator: Allocator) !SupportDetails {
-        _ = ctx;
-        _ = pdev;
-        _ = allocator;
-
-        return undefined;
-        // return .{
-        //     .capabilities = ctx.pr_inst.getPhysicalDeviceSurfaceCapabilitiesKHR(pdev, )
-        // }
-    }
-
-    pub fn init(config: *const Config, device: *const Device) !Swapchain {
+    pub fn init(
+        device: *const Device,
+        surface: *const Surface,
+        config: *const Config,
+    ) !Swapchain {
         _ = config;
         _ = device;
+        _ = surface;
     }
 };
