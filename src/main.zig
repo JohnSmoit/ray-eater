@@ -11,7 +11,6 @@ pub fn main() !void {
         return err;
     };
     defer glfw.terminate();
-    errdefer glfw.terminate();
 
     Window.hints(.{
         .{ glfw.CLIENT_API, glfw.NO_API },
@@ -28,6 +27,8 @@ pub fn main() !void {
         std.debug.print("Could not load Vulkan\n", .{});
         return err;
     };
+
+    window.show();
 
     // apparently GeneralPurposeAllocator is deprecated so I guess I'll try this one?
     var gpa = std.heap.DebugAllocator(.{}).init;

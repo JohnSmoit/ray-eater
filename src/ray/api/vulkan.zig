@@ -137,7 +137,7 @@ pub const Context = struct {
         // }
 
         // TODO: make sure our wanted extensions are available
-
+        //TODO: Not sure I setup the validatiopn layer configs correctly (uh oh)
         const instance = try self.w_db.createInstance(&.{
             .p_application_info = &.{
                 .p_application_name = "RayEater_Renderer",
@@ -275,11 +275,29 @@ pub const Device = struct {
         ) catch util.emptySlice(vk.PresentModeKHR);
         errdefer allocator.free(present_modes);
 
+        // log stuff
+        for (formats) |format| {
+            std.debug.print("[DEVICE]: Supported Format: {s}\n", .{@tagName(format.format)});
+            std.debug.print("[DEVICE]: Supported Color Space: {s}\n", .{@tagName(format.color_space)});
+        }
+
+        // This specific call explodes -- even when I can all but confirm the given surface handle is valid
+        // but it says some bullshit about the surface being lost or soemthing
+
+        // const rawCall = pr_inst.wrapper.dispatch.vkGetPhysicalDeviceSurfaceCapabilitiesKHR.?;
+
+        // var capabilities: vk.SurfaceCapabilitiesKHR = undefined;
+        // const result = rawCall(
+        //     pdev,
+        //     surface.h_surface,
+        //     &capabilities,
+        // );
+        // if (result != .success) {
+        //     std.debug.print("[DEVICE]: Failed to get surface capabilities with error: {s}\n", .{@tagName(result)});
+        //     return error.Fuck;
+        // }
         return .{
-            .capabilities = try pr_inst.getPhysicalDeviceSurfaceCapabilitiesKHR(
-                pdev,
-                surface.h_surface,
-            ),
+            .capabilities = undefined,
             .formats = formats,
             .present_modes = present_modes,
             .allocator = allocator,
@@ -395,7 +413,7 @@ pub const Device = struct {
                 dev,
                 allocator,
             ) catch |err| {
-                std.debug.print("FUAUFAIFUEIAUFOAFUO: {!}\n", .{err});
+                std.debug.print("[DEVICE]: Failed to query device presentation features due to error: {!}\n", .{err});
                 continue;
             };
             defer dev_present_features.deinit();
@@ -557,7 +575,7 @@ pub const Surface = struct {
     pub fn init(window: *glfw.Window, ctx: *const Context) !Surface {
         var surface: vk.SurfaceKHR = undefined;
 
-        if (glfw.glfwCreateWindowSurface(ctx.pr_inst.handle, window, null, &surface) != .success) {
+        if (glfw.glfwCreateWindowSurface(ctx.pr_inst.handle, window.handle, null, &surface) != .success) {
             std.debug.print("[SURFACE]: Failed to create window surface!\n", .{});
             return error.SurfaceCreationFailed;
         }

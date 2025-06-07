@@ -34,7 +34,7 @@ fn ErrorOnFalse(comptime func: fn () callconv(.c) c_int, comptime err: anytype) 
 }
 
 pub extern fn glfwGetInstanceProcAddress(instance: vk.Instance, name: [*:0]const u8) vk.PfnVoidFunction;
-pub extern fn glfwCreateWindowSurface(instance: vk.Instance, window: *Window, allocation_callbacks: ?*const vk.AllocationCallbacks, surface: *vk.SurfaceKHR) vk.Result;
+pub extern fn glfwCreateWindowSurface(instance: vk.Instance, window: *GLFWwindow, allocation_callbacks: ?*const vk.AllocationCallbacks, surface: *vk.SurfaceKHR) vk.Result;
 
 pub const init = ErrorOnFalse(c.glfwInit, error.GLFWInitFailed);
 pub const terminate = c.glfwTerminate;
@@ -42,6 +42,7 @@ pub const vulkanSupported = ErrorOnFalse(c.glfwVulkanSupported, error.VulkanUnsu
 pub const getRequiredInstanceExtensions = c.glfwGetRequiredInstanceExtensions;
 pub const getFramebufferSize = c.glfwGetFramebufferSize;
 pub const pollEvents = c.glfwPollEvents;
+pub const setErrorCallback = c.glfwSetErrorCallback;
 
 pub const createWindowSurface = c.glfwCreateWindowSurface;
 
@@ -75,5 +76,9 @@ pub const Window = struct {
             glfwWindowHint(hintName, hintValue);
             _ = i;
         }
+    }
+
+    pub fn show(self: *Window) void {
+        c.glfwShowWindow(self.handle);
     }
 };

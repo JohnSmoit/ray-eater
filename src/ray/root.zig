@@ -35,7 +35,12 @@ var window_handle: ?*glfw.Window = null;
 const validation_layers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
 
+fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
+    std.debug.print("[GLFW]: Error code {d} -- Message: {s}\n", .{ code, desc });
+}
+
 pub fn testInit(allocator: Allocator) !void {
+    _ = glfw.setErrorCallback(glfwErrorCallback);
     var extensions = std.ArrayList([*:0]const u8).init(allocator);
     defer extensions.deinit();
 
