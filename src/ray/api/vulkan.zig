@@ -261,6 +261,10 @@ pub const Device = struct {
         pdev: vk.PhysicalDevice, //TODO: Optional -- Will use chosen physical device info if omitted
         allocator: Allocator,
     ) !SwapchainSupportDetails {
+        const capabilities = try pr_inst.getPhysicalDeviceSurfaceCapabilitiesKHR(
+            pdev,
+            surface.h_surface,
+        );
         const formats = pr_inst.getPhysicalDeviceSurfaceFormatsAllocKHR(
             pdev,
             surface.h_surface,
@@ -297,7 +301,7 @@ pub const Device = struct {
         //     return error.Fuck;
         // }
         return .{
-            .capabilities = undefined,
+            .capabilities = capabilities,
             .formats = formats,
             .present_modes = present_modes,
             .allocator = allocator,
