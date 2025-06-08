@@ -23,12 +23,14 @@ pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0]const u8) callconv(
 
 var external_extensions: ?[][*:0]const u8 = null;
 
+// temporary global vulkan state objects, most of which will be my wrapper types
 var context: api.Context = undefined;
 var device: api.Device = undefined;
 var surface: api.Surface = undefined;
 
 var graphics_queue: api.GraphicsQueue = undefined;
 var present_queue: api.PresentQueue = undefined;
+var swapchain: api.Swapchain = undefined;
 
 var window_handle: ?*glfw.Window = null;
 
@@ -80,6 +82,19 @@ pub fn testInit(allocator: Allocator) !void {
 
     present_queue = try api.PresentQueue.init(&device);
     errdefer present_queue.deinit();
+
+    swapchain = try api.Swapchain.init(&device, &surface, &.{
+        .requested_present_mode = .mailbox_khr,
+        .requested_format = .{
+            .color_space = .srgb_nonlinear_khr,
+            .format = .b8g8r8a8_srgb,
+        },
+        .requested_extent = .{
+            .width = 900, // hardcoded for my sanity
+            .height = 600,
+        },
+    });
+    errdefer swapchain.deinit();
 }
 
 pub fn setWindow(window: *glfw.Window) void {
@@ -93,6 +108,7 @@ pub fn setRequiredExtensions(names: [][*:0]const u8) void {
 pub fn testLoop() !void {}
 
 pub fn testDeinit() void {
+    swapchain.deinit();
     graphics_queue.deinit();
     present_queue.deinit();
     surface.deinit();

@@ -240,7 +240,7 @@ pub const Device = struct {
         present_modes: []vk.PresentModeKHR = util.emptySlice(vk.PresentModeKHR),
         allocator: ?Allocator,
 
-        pub fn deinit(self: *SwapchainSupportDetails) void {
+        pub fn deinit(self: *const SwapchainSupportDetails) void {
             const allocator = self.allocator orelse return;
 
             allocator.free(self.formats);
@@ -279,27 +279,6 @@ pub const Device = struct {
         ) catch util.emptySlice(vk.PresentModeKHR);
         errdefer allocator.free(present_modes);
 
-        // log stuff
-        for (formats) |format| {
-            std.debug.print("[DEVICE]: Supported Format: {s}\n", .{@tagName(format.format)});
-            std.debug.print("[DEVICE]: Supported Color Space: {s}\n", .{@tagName(format.color_space)});
-        }
-
-        // This specific call explodes -- even when I can all but confirm the given surface handle is valid
-        // but it says some bullshit about the surface being lost or soemthing
-
-        // const rawCall = pr_inst.wrapper.dispatch.vkGetPhysicalDeviceSurfaceCapabilitiesKHR.?;
-
-        // var capabilities: vk.SurfaceCapabilitiesKHR = undefined;
-        // const result = rawCall(
-        //     pdev,
-        //     surface.h_surface,
-        //     &capabilities,
-        // );
-        // if (result != .success) {
-        //     std.debug.print("[DEVICE]: Failed to get surface capabilities with error: {s}\n", .{@tagName(result)});
-        //     return error.Fuck;
-        // }
         return .{
             .capabilities = capabilities,
             .formats = formats,
@@ -310,6 +289,7 @@ pub const Device = struct {
 
     ctx: *const Context,
     families: FamilyIndices,
+    swapchain_details: SwapchainSupportDetails,
 
     h_dev: vk.Device = .null_handle,
     h_pdev: vk.PhysicalDevice = .null_handle,
@@ -460,6 +440,13 @@ pub const Device = struct {
 
         // just enable all the available features lmao
         const dev_features = parent.pr_inst.getPhysicalDeviceFeatures(chosen_dev);
+        const swapchain_details = getDeviceSupport(
+            &parent.pr_inst,
+            config.surface,
+            chosen_dev,
+            parent.allocator,
+        ) catch unreachable;
+        errdefer swapchain_details.deinit();
 
         const priority = [_]f32{1.0};
 
@@ -513,6 +500,7 @@ pub const Device = struct {
             .h_dev = logical_dev,
             .h_pdev = chosen_dev,
             .families = dev_queue_indices,
+            .swapchain_details = swapchain_details,
         };
     }
 
@@ -520,6 +508,7 @@ pub const Device = struct {
         self.pr_dev.destroyDevice(null);
 
         self.ctx.allocator.destroy(self.dev_wrapper);
+        self.swapchain_details.deinit();
     }
 
     fn getQueueHandle(self: *const Device, family: QueueFamily) ?vk.Queue {
@@ -606,20 +595,189 @@ pub const ComputeQueue = GenericQueue(.Compute);
 
 pub const Swapchain = struct {
     pub const Config = struct {
-        requested_formats: ?[]const []struct {
+        requested_format: struct { //TODO: support picking default/picking from multiple
             color_space: vk.ColorSpaceKHR,
             format: vk.Format,
         },
-        present_mode: vk.PresentModeKHR,
+        requested_present_mode: vk.PresentModeKHR,
+        requested_extent: vk.Extent2D,
     };
+
+    pub const ImageInfo = struct {
+        h_image: vk.Image,
+        h_view: vk.ImageView,
+    };
+
+    surface_format: vk.SurfaceFormatKHR = undefined,
+    present_mode: vk.PresentModeKHR = undefined,
+    extent: vk.Extent2D = undefined,
+    h_swapchain: vk.SwapchainKHR = undefined,
+    dev: *const Device = undefined,
+    images: []ImageInfo = util.emptySlice(vk.Image),
+
+    fn chooseSurfaceFormat(
+        available: []const vk.SurfaceFormatKHR,
+        config: *const Config,
+    ) !vk.SurfaceFormatKHR {
+        var chosen_format: ?vk.SurfaceFormatKHR = null;
+        for (available) |*fmt| {
+            if (fmt.format == config.requested_format.format and
+                fmt.color_space == config.requested_format.color_space)
+            {
+                chosen_format = fmt.*;
+                break;
+            }
+        }
+
+        return chosen_format orelse error.NoSuitableFormat;
+    }
+
+    fn chooseExtent(
+        capabilities: *const vk.SurfaceCapabilitiesKHR,
+        config: *const Config,
+    ) !vk.Extent2D {
+        if (capabilities.current_extent.width != std.math.maxInt(u32)) {
+            return capabilities.current_extent;
+        }
+
+        const extent: vk.Extent2D = .{
+            .width = std.math.clamp(
+                config.requested_extent.width,
+                capabilities.min_image_extent.width,
+                capabilities.max_image_extent.width,
+            ),
+            .height = std.math.clamp(
+                config.requested_extent.height,
+                capabilities.min_image_extent.height,
+                capabilities.max_image_extent.height,
+            ),
+        };
+
+        return extent;
+    }
+
+    fn choosePresentMode(
+        available: []const vk.PresentModeKHR,
+        config: *const Config,
+    ) !vk.PresentModeKHR {
+        var chosen_mode: ?vk.PresentModeKHR = null;
+        for (available) |mode| {
+            if (mode == config.requested_present_mode) {
+                chosen_mode = mode;
+                break;
+            }
+        }
+
+        return chosen_mode orelse error.NoSuitableFormat;
+    }
+
+    fn createImageViews(self: *Swapchain) !void {}
 
     pub fn init(
         device: *const Device,
         surface: *const Surface,
         config: *const Config,
     ) !Swapchain {
-        _ = config;
-        _ = device;
-        _ = surface;
+        // TODO: Swapchain support details should probably lie within the Surface type
+        // instead of the device since these details mostly concern properties of the chosen
+        // draw surface.
+        const details: *const Device.SwapchainSupportDetails = &device.swapchain_details;
+
+        // request an appropriate number of swapchain images
+        var image_count: u32 = details.capabilities.min_image_count + 1;
+        if (details.capabilities.max_image_count > 0) {
+            image_count = @min(image_count, details.capabilities.max_image_count);
+        }
+
+        const surface_format = try chooseSurfaceFormat(
+            device.swapchain_details.formats,
+            config,
+        );
+
+        const present_mode = try choosePresentMode(
+            device.swapchain_details.present_modes,
+            config,
+        );
+
+        const extent = try chooseExtent(
+            &device.swapchain_details.capabilities,
+            config,
+        );
+
+        // make sure the swapchain knows about the relationship between our queue families
+        // (i.e which families map to which queues or if both map to one and such)
+        var queue_indices = [_]u32{
+            device.families.graphics_family.?,
+            device.families.present_family.?,
+        };
+
+        var image_sharing_mode: vk.SharingMode = .exclusive;
+        var queue_family_index_count: u32 = 0;
+        var p_queue_family_indices: ?[*]u32 = null;
+        if (queue_indices[0] != queue_indices[1]) {
+            image_sharing_mode = .concurrent;
+            queue_family_index_count = queue_indices.len;
+            p_queue_family_indices = &queue_indices;
+        }
+
+        // specify the gajillion config values to create the swapchain
+        var chain = Swapchain{
+            .surface_format = surface_format,
+            .present_mode = present_mode,
+            .extent = extent,
+            .dev = device,
+
+            // the giant ass struct for swapchain creation starts here
+            .h_swapchain = try device.pr_dev.createSwapchainKHR(&.{
+                .surface = surface.h_surface,
+
+                // drop in the queried values
+                .min_image_count = image_count,
+                .image_format = surface_format.format,
+                .image_color_space = surface_format.color_space,
+                .present_mode = present_mode,
+                .image_extent = extent,
+
+                //hardcoded (for now) values
+                .image_array_layers = 1,
+                .image_usage = .{ .color_attachment_bit = true },
+
+                // image sharing properties (controls how queues can access and work in tandem)
+                // with a given swapchain image
+                .image_sharing_mode = image_sharing_mode,
+                .queue_family_index_count = queue_family_index_count,
+                .p_queue_family_indices = p_queue_family_indices,
+
+                // whether or not to transform the rendered image before presenting
+                .pre_transform = details.capabilities.current_transform,
+
+                // whether to take the alpha channel into account to do cross-window blending (weird)
+                .composite_alpha = .{ .opaque_bit_khr = true },
+
+                // ignore obscured pixels (i.e covered by another window)
+                .clipped = vk.TRUE,
+
+                // old swapchain (used for swapchain recreation which will come later)
+                .old_swapchain = .null_handle,
+            }, null),
+        };
+        // TODO: Figure out a better deallocation strategy then this crap
+
+        // get handles to the created images and create their associated views
+        // (which has to be done AFTER the swapchain is created hence the var instead of const)
+        try chain.createImageViews();
+
+        return chain;
+    }
+
+    pub fn deinit(self: *const Swapchain) void {
+        for (self.images) |*info| {
+            self.dev.pr_dev.destroyImage(info.h_image, null);
+            self.dev.pr_dev.destroyImageView(info.h_view, null);
+        }
+
+        self.dev.ctx.allocator.free(self.images);
+
+        self.dev.pr_dev.destroySwapchainKHR(self.h_swapchain, null);
     }
 };
