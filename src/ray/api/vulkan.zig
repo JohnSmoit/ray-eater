@@ -613,7 +613,7 @@ pub const Swapchain = struct {
     extent: vk.Extent2D = undefined,
     h_swapchain: vk.SwapchainKHR = undefined,
     dev: *const Device = undefined,
-    images: []ImageInfo = util.emptySlice(vk.Image),
+    images: []ImageInfo = util.emptySlice(ImageInfo),
 
     fn chooseSurfaceFormat(
         available: []const vk.SurfaceFormatKHR,
@@ -671,7 +671,35 @@ pub const Swapchain = struct {
         return chosen_mode orelse error.NoSuitableFormat;
     }
 
-    fn createImageViews(self: *Swapchain) !void {}
+    fn createImageViews(self: *Swapchain) !void {
+        const image_handles = try self.dev.pr_dev.getSwapchainImagesAllocKHR(self.h_swapchain, self.dev.ctx.allocator);
+        defer self.dev.ctx.allocator.free(image_handles);
+
+        var images = try self.dev.ctx.allocator.alloc(ImageInfo, image_handles.len);
+
+        for (image_handles, 0..) |img, index| {
+
+            // create and assign the corresponding image view
+            // this formatting ie ZLS's fault, plz disable auto format on write since it seems to suck ass
+            const image_view = try self.dev.pr_dev.createImageView(&.{ .image = img, .view_type = .@"2d", .format = self.surface_format.format, .components = .{
+                .r = .identity,
+                .g = .identity,
+                .b = .identity,
+                .a = .identity,
+            }, .subresource_range = .{
+                .aspect_mask = .{ .color_bit = true },
+                .base_mip_level = 0,
+                .level_count = 1,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            } }, null);
+
+            images[index].h_image = img;
+            images[index].h_view = image_view;
+        }
+
+        self.images = images;
+    }
 
     pub fn init(
         device: *const Device,
@@ -772,12 +800,12 @@ pub const Swapchain = struct {
 
     pub fn deinit(self: *const Swapchain) void {
         for (self.images) |*info| {
-            self.dev.pr_dev.destroyImage(info.h_image, null);
             self.dev.pr_dev.destroyImageView(info.h_view, null);
         }
 
         self.dev.ctx.allocator.free(self.images);
 
+        // NOTE: The image handles are owned by the swapchain and therefore shouold not be destroyed by me.
         self.dev.pr_dev.destroySwapchainKHR(self.h_swapchain, null);
     }
 };
