@@ -18,6 +18,9 @@ const Allocator = std.mem.Allocator;
 // use a bunch of bullshit global state to test VkInstance creation
 pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0]const u8) callconv(.c) vk.PfnVoidFunction);
 
+const root_log = std.log;
+const glfw_log = std.log.scoped(.glfw);
+
 // vulkan loader function (i.e glfwGetProcAddress) in charge of finding vulkan API symbols in the first place
 // (since all linking is of the runtime dynamic variety)
 
@@ -38,7 +41,7 @@ const validation_layers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
 
 fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
-    std.debug.print("[GLFW]: Error code {d} -- Message: {s}\n", .{ code, desc });
+    glfw_log.err("error code {d} -- Message: {s}", .{ code, desc });
 }
 
 pub fn testInit(allocator: Allocator) !void {

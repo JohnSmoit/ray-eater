@@ -5,6 +5,10 @@ const util = @import("../util.zig"); //TODO: avorelative id relative if possible
 // note: Yucky
 const glfw = @import("glfw");
 
+// logging stuff
+const global_log = std.log;
+const validation_log = global_log.scoped(.validation);
+
 // =============================
 // ******* Context API *********
 // =============================
@@ -39,14 +43,17 @@ pub const ContextConfig = struct {
 };
 
 fn debugCallback(message_severity: vk.DebugUtilsMessageSeverityFlagsEXT, message_type: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, p_user_data: ?*anyopaque) callconv(.c) vk.Bool32 {
-    const callbackData = p_callback_data orelse {
-        std.debug.print("Something probably bad happened but vulkan won't fucking give me the info\n", .{});
+    const callback_data = p_callback_data orelse {
+        validation_log.err("Something probably bad happened but vulkan won't fucking give me the info", .{});
         return vk.FALSE;
     };
 
-    std.debug.print("[VALIDATION]: {s}\n", .{callbackData.p_message orelse "Fuck"});
+    // TODO: Handle the bitset flags as independent enum values...
+    // That way, logging levels will work for vulkan validation as well..
+    const msg_level = message_severity.toInt();
 
-    _ = message_severity;
+    validation_log.debug("{d} -- {s}", .{ msg_level, callback_data.p_message orelse "Fuck" });
+
     _ = message_type;
     _ = p_user_data;
 
@@ -54,6 +61,7 @@ fn debugCallback(message_severity: vk.DebugUtilsMessageSeverityFlagsEXT, message
 }
 // use a bunch of bullshit global state to test VkInstance creation
 pub const Context = struct {
+    pub const log = global_log.scoped(.context);
     pr_inst: vk.InstanceProxy = undefined,
 
     h_dmsg: vk.DebugUtilsMessengerEXT = .null_handle,
@@ -94,19 +102,19 @@ pub const Context = struct {
             null,
             config.allocator,
         ) catch {
-            std.debug.print("Failed to enumerate extension properties... this is probably bad.\n", .{});
+            log.debug("Failed to enumerate extension properties... this is probably bad.\n", .{});
             return error.ExtensionEnumerationFailed;
         };
         defer config.allocator.free(available);
 
-        std.debug.print("[INSTANCE]: Available Extensions:\n", .{});
+        log.debug("Available Extensions:", .{});
         for (available) |ext| {
             const en = util.asCString(&ext.extension_name);
-            std.debug.print("[INSTANCE]: Extension: {s}\n", .{en});
+            log.debug("Extension: {s}", .{en});
         }
 
         for (config.instance.required_extensions) |req| {
-            std.debug.print("[INSTANCE]: Required -- {s}\n", .{req});
+            log.debug("Required -- {s}", .{req});
         }
 
         // make sure the requested validation layers are available
@@ -115,7 +123,7 @@ pub const Context = struct {
 
         for (availableLayers) |*al| {
             const cLn = util.asCString(&al.layer_name);
-            std.debug.print("[INSTANCE]: Available Layer: {s}\n", .{cLn});
+            log.debug("Available Layer: {s}", .{cLn});
         }
 
         for (config.instance.validation_layers) |wl| {
@@ -164,7 +172,7 @@ pub const Context = struct {
         );
 
         // self.w_di = instance_wrapper;
-        std.debug.print("[INSTANCE]: Is dispatch entry null: {s}\n", .{
+        log.debug("Is dispatch entry null: {s}", .{
             if (self.w_di.dispatch.vkDestroyDebugUtilsMessengerEXT != null) "no" else "yes",
         });
         self.pr_inst = vk.InstanceProxy.init(instance, self.w_di);
@@ -182,7 +190,7 @@ pub const Context = struct {
 
         // check to see if the dispatch table loading fucked up
         if (self.w_db.dispatch.vkEnumerateInstanceExtensionProperties == null) {
-            std.debug.print("Function loading failed (optional contains a null value)\n", .{});
+            log.debug("Function loading failed (optional contains a null value)", .{});
             return error.DispatchLoadingFailed;
         }
     }
@@ -204,7 +212,7 @@ pub const Context = struct {
     }
 
     pub fn deinit(self: *Context) void {
-        std.debug.print("[INSTANCE]: Is dispatch entry null: {s}\n", .{
+        log.debug("Is dispatch entry null: {s}", .{
             if (self.pr_inst.wrapper.dispatch.vkDestroyDebugUtilsMessengerEXT != null) "no" else "yes",
         });
 
@@ -228,6 +236,7 @@ pub const DeviceConfig = struct {
 };
 
 pub const Device = struct {
+    pub const log = global_log.scoped(.device);
     const FamilyIndices = struct {
         graphics_family: ?u32 = null,
         present_family: ?u32 = null,
@@ -344,7 +353,7 @@ pub const Device = struct {
     ) ?vk.PhysicalDevice {
         const physical_devices =
             pr_inst.enumeratePhysicalDevicesAlloc(allocator) catch |err| {
-                std.debug.print(
+                log.debug(
                     "[DEVICE]: Encountered Error enumerating available physical devices: {!}\n",
                     .{err},
                 );
@@ -355,7 +364,7 @@ pub const Device = struct {
         var chosen_dev: ?vk.PhysicalDevice = null;
         dev_loop: for (physical_devices) |dev| {
             const dev_properties = pr_inst.getPhysicalDeviceProperties(dev);
-            std.debug.print(
+            log.debug(
                 \\[DEVICE]: Found Device Named {s}
                 \\    ID: {d}
                 \\    Type: {d} 
@@ -397,14 +406,14 @@ pub const Device = struct {
                 dev,
                 allocator,
             ) catch |err| {
-                std.debug.print("[DEVICE]: Failed to query device presentation features due to error: {!}\n", .{err});
+                log.debug("[DEVICE]: Failed to query device presentation features due to error: {!}\n", .{err});
                 continue;
             };
             defer dev_present_features.deinit();
 
             if (dev_present_features.formats.len != 0 and dev_present_features.present_modes.len != 0) {
                 chosen_dev = dev;
-                std.debug.print(
+                log.debug(
                     \\[DEVICE]: Chose Device Named {s}
                     \\    ID: {d}
                     \\    Type: {d} 
@@ -427,7 +436,7 @@ pub const Device = struct {
             config,
             parent.allocator,
         ) orelse {
-            std.debug.print("[DEVICE]: Failed to find suitable device\n", .{});
+            log.debug("[DEVICE]: Failed to find suitable device\n", .{});
             return error.NoSuitableDevice;
         };
 
@@ -471,7 +480,7 @@ pub const Device = struct {
             .pp_enabled_extension_names = config.required_extensions.ptr,
             .enabled_extension_count = @intCast(config.required_extensions.len),
         }, null) catch |err| {
-            std.debug.print("[DEVICE]: Failed to initialize logical device: {!}\n", .{err});
+            log.debug("[DEVICE]: Failed to initialize logical device: {!}\n", .{err});
             return error.LogicalDeviceFailed;
         };
 
@@ -485,10 +494,10 @@ pub const Device = struct {
         );
 
         if (dev_wrapper.dispatch.vkDestroyDevice == null) {
-            std.debug.print("[DEVICE]: Failed to load dispatch table\n", .{});
+            log.debug("[DEVICE]: Failed to load dispatch table\n", .{});
             return error.DispatchLoadingFailed;
         } else {
-            std.debug.print("[DEVICE]: Dispatch loading successful\n", .{});
+            log.debug("[DEVICE]: Dispatch loading successful\n", .{});
         }
 
         const dev_proxy = vk.DeviceProxy.init(logical_dev, dev_wrapper);
@@ -533,6 +542,8 @@ pub const QueueFamily = enum {
 
 pub fn GenericQueue(comptime p_family: QueueFamily) type {
     return struct {
+        pub const log = global_log.scoped(p_family);
+
         const family = p_family;
         pub const Self = @This();
 
@@ -542,7 +553,7 @@ pub fn GenericQueue(comptime p_family: QueueFamily) type {
         pub fn init(dev: *const Device) !Self {
             // hardcode to graphics queue for now
             const queue_handle = dev.getQueueHandle(family) orelse {
-                std.debug.print("[QUEUE]: Failed to acquire Queue handle\n", .{});
+                log.debug("[QUEUE]: Failed to acquire Queue handle\n", .{});
                 return error.MissingQueueHandle;
             };
 
@@ -561,6 +572,7 @@ pub fn GenericQueue(comptime p_family: QueueFamily) type {
 }
 
 pub const Surface = struct {
+    pub const log = global_log.scoped(.surface);
     h_window: *glfw.Window = undefined,
     h_surface: vk.SurfaceKHR = .null_handle,
     ctx: *const Context = undefined,
@@ -569,7 +581,7 @@ pub const Surface = struct {
         var surface: vk.SurfaceKHR = undefined;
 
         if (glfw.glfwCreateWindowSurface(ctx.pr_inst.handle, window.handle, null, &surface) != .success) {
-            std.debug.print("[SURFACE]: Failed to create window surface!\n", .{});
+            log.debug("failed to create window surface!", .{});
             return error.SurfaceCreationFailed;
         }
 
@@ -594,6 +606,8 @@ pub const ComputeQueue = GenericQueue(.Compute);
 // =================================================
 
 pub const Swapchain = struct {
+    pub const log = global_log.scoped(.swapchain);
+
     pub const Config = struct {
         requested_format: struct { //TODO: support picking default/picking from multiple
             color_space: vk.ColorSpaceKHR,
@@ -629,6 +643,8 @@ pub const Swapchain = struct {
             }
         }
 
+        log.debug("chose present mode: {s}", .{@tagName(chosen_format.?.format)});
+
         return chosen_format orelse error.NoSuitableFormat;
     }
 
@@ -637,6 +653,7 @@ pub const Swapchain = struct {
         config: *const Config,
     ) !vk.Extent2D {
         if (capabilities.current_extent.width != std.math.maxInt(u32)) {
+            log.debug("chose natively supported extent", .{});
             return capabilities.current_extent;
         }
 
@@ -653,6 +670,7 @@ pub const Swapchain = struct {
             ),
         };
 
+        log.debug("chose extent: [width: {d}, height: {d}]", .{ extent.width, extent.height });
         return extent;
     }
 
@@ -668,6 +686,9 @@ pub const Swapchain = struct {
             }
         }
 
+        log.debug("chose present mode: {s}", .{
+            @tagName(chosen_mode orelse .none),
+        });
         return chosen_mode orelse error.NoSuitableFormat;
     }
 
