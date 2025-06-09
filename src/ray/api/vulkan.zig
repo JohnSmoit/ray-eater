@@ -354,7 +354,7 @@ pub const Device = struct {
         const physical_devices =
             pr_inst.enumeratePhysicalDevicesAlloc(allocator) catch |err| {
                 log.debug(
-                    "[DEVICE]: Encountered Error enumerating available physical devices: {!}\n",
+                    "Encountered Error enumerating available physical devices: {!}",
                     .{err},
                 );
                 return null;
@@ -365,7 +365,7 @@ pub const Device = struct {
         dev_loop: for (physical_devices) |dev| {
             const dev_properties = pr_inst.getPhysicalDeviceProperties(dev);
             log.debug(
-                \\[DEVICE]: Found Device Named {s}
+                \\Found Device Named {s}
                 \\    ID: {d}
                 \\    Type: {d} 
                 \\
@@ -406,7 +406,7 @@ pub const Device = struct {
                 dev,
                 allocator,
             ) catch |err| {
-                log.debug("[DEVICE]: Failed to query device presentation features due to error: {!}\n", .{err});
+                log.debug("Failed to query device presentation features due to error: {!}\n", .{err});
                 continue;
             };
             defer dev_present_features.deinit();
@@ -414,7 +414,7 @@ pub const Device = struct {
             if (dev_present_features.formats.len != 0 and dev_present_features.present_modes.len != 0) {
                 chosen_dev = dev;
                 log.debug(
-                    \\[DEVICE]: Chose Device Named {s}
+                    \\Chose Device Named {s}
                     \\    ID: {d}
                     \\    Type: {d} 
                     \\
@@ -436,7 +436,7 @@ pub const Device = struct {
             config,
             parent.allocator,
         ) orelse {
-            log.debug("[DEVICE]: Failed to find suitable device\n", .{});
+            log.debug("Failed to find suitable device\n", .{});
             return error.NoSuitableDevice;
         };
 
@@ -480,7 +480,7 @@ pub const Device = struct {
             .pp_enabled_extension_names = config.required_extensions.ptr,
             .enabled_extension_count = @intCast(config.required_extensions.len),
         }, null) catch |err| {
-            log.debug("[DEVICE]: Failed to initialize logical device: {!}\n", .{err});
+            log.debug("Failed to initialize logical device: {!}\n", .{err});
             return error.LogicalDeviceFailed;
         };
 
@@ -494,10 +494,10 @@ pub const Device = struct {
         );
 
         if (dev_wrapper.dispatch.vkDestroyDevice == null) {
-            log.debug("[DEVICE]: Failed to load dispatch table\n", .{});
+            log.debug("Failed to load dispatch table\n", .{});
             return error.DispatchLoadingFailed;
         } else {
-            log.debug("[DEVICE]: Dispatch loading successful\n", .{});
+            log.debug("Dispatch loading successful\n", .{});
         }
 
         const dev_proxy = vk.DeviceProxy.init(logical_dev, dev_wrapper);
@@ -542,7 +542,7 @@ pub const QueueFamily = enum {
 
 pub fn GenericQueue(comptime p_family: QueueFamily) type {
     return struct {
-        pub const log = global_log.scoped(p_family);
+        pub const log = global_log.scoped(.queue);
 
         const family = p_family;
         pub const Self = @This();
@@ -553,7 +553,7 @@ pub fn GenericQueue(comptime p_family: QueueFamily) type {
         pub fn init(dev: *const Device) !Self {
             // hardcode to graphics queue for now
             const queue_handle = dev.getQueueHandle(family) orelse {
-                log.debug("[QUEUE]: Failed to acquire Queue handle\n", .{});
+                log.debug("Failed to acquire Queue handle", .{});
                 return error.MissingQueueHandle;
             };
 
@@ -570,6 +570,10 @@ pub fn GenericQueue(comptime p_family: QueueFamily) type {
         }
     };
 }
+
+pub const GraphicsQueue = GenericQueue(.Graphics);
+pub const PresentQueue = GenericQueue(.Present);
+pub const ComputeQueue = GenericQueue(.Compute);
 
 pub const Surface = struct {
     pub const log = global_log.scoped(.surface);
@@ -596,10 +600,6 @@ pub const Surface = struct {
         self.ctx.pr_inst.destroySurfaceKHR(self.h_surface, null);
     }
 };
-
-pub const GraphicsQueue = GenericQueue(.Graphics);
-pub const PresentQueue = GenericQueue(.Present);
-pub const ComputeQueue = GenericQueue(.Compute);
 
 // =================================================
 // ******* Swapchain Stuff *************************
@@ -687,7 +687,7 @@ pub const Swapchain = struct {
         }
 
         log.debug("chose present mode: {s}", .{
-            @tagName(chosen_mode orelse .none),
+            @tagName(chosen_mode.?),
         });
         return chosen_mode orelse error.NoSuitableFormat;
     }
