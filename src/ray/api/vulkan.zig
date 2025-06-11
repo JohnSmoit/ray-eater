@@ -1,6 +1,7 @@
 const vk = @import("vulkan");
 const std = @import("std");
 const util = @import("../util.zig"); //TODO: avorelative id relative if possible
+const shader = @import("shader.zig");
 
 // note: Yucky
 const glfw = @import("glfw");
@@ -830,3 +831,7 @@ pub const Swapchain = struct {
         self.dev.pr_dev.destroySwapchainKHR(self.h_swapchain, null);
     }
 };
+
+// ============================
+// ******* SHADERS ************
+// ============================

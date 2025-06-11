@@ -1,10 +1,5 @@
 const std = @import("std");
 
-fn getGLFWDep(b: *std.Build) *std.Build.Dependency {
-    // TODO: Swap dependency based on platform so the correct binary is linked
-    return b.dependency("glfw_windows", .{});
-}
-
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
 // runner.
@@ -21,7 +16,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const vulkan_mod = b.dependency("vulkan", .{ .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml") }).module("vulkan-zig");
+    const vulkan_mod = b.dependency(
+        "vulkan",
+        .{
+            .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml"),
+        },
+    ).module("vulkan-zig");
+
+    const rshc_mod = b.dependency("RshLang", .{}).module("rshc");
 
     // module definition for the temporary test application
     // This is only intended to exist during early development/prototyping to
@@ -38,13 +40,14 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const glfw_dep = getGLFWDep(b);
+    const glfw_dep = b.dependency("glfw_windows", .{});
 
     app_mod.addImport("ray", lib_mod);
     app_mod.addImport("glfw", glfw_mod);
 
     lib_mod.addImport("vulkan", vulkan_mod);
     lib_mod.addImport("glfw", glfw_mod);
+    lib_mod.addImport("rshc", rshc_mod);
 
     glfw_mod.addObjectFile(glfw_dep.path("lib-mingw-w64/libglfw3.a"));
     glfw_mod.addImport("vulkan", vulkan_mod);
