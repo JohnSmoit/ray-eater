@@ -42,6 +42,9 @@ var renderpass: api.RenderPass = undefined;
 
 var graphics_pipeline: api.GraphicsPipeline = undefined;
 
+// rendering stuff
+var framebuffers: api.FramebufferSet = undefined;
+
 const validation_layers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
 
@@ -53,6 +56,7 @@ pub fn testInit(allocator: Allocator) !void {
     _ = glfw.setErrorCallback(glfwErrorCallback);
 
     // scratch (Arena) allocator for memory stuff
+    // NOTE: do NOT use this for allocations that are supposed to be persistent
     var arena = std.heap.ArenaAllocator.init(allocator);
     defer arena.deinit();
     const scratch = arena.allocator();
@@ -139,7 +143,7 @@ pub fn testInit(allocator: Allocator) !void {
     defer fixed_function_state.deinit();
 
     // test create render pass state and stuff i guess
-    renderpass = try api.RenderPass.init_from_swapchain(&device, &swapchain);
+    renderpass = try api.RenderPass.initFromSwapchain(&device, &swapchain);
     errdefer renderpass.deinit();
 
     graphics_pipeline = try api.GraphicsPipeline.init(&device, &.{
@@ -148,6 +152,16 @@ pub fn testInit(allocator: Allocator) !void {
         .shader_stages = &[_]shader.Module{ vert_shader_module, frag_shader_module },
     }, scratch);
     errdefer graphics_pipeline.deinit();
+
+    framebuffers = try api.FramebufferSet.initAlloc(&device, allocator, &.{
+        .renderpass = &renderpass,
+        .image_views = swapchain.images,
+        .extent = .{
+            .x = swapchain.extent.width,
+            .y = swapchain.extent.height,
+        }
+    });
+    errdefer framebuffers.deinit();
 }
 
 pub fn setWindow(window: *glfw.Window) void {
@@ -161,6 +175,7 @@ pub fn setRequiredExtensions(names: [][*:0]const u8) void {
 pub fn testLoop() !void {}
 
 pub fn testDeinit() void {
+    framebuffers.deinit();
     graphics_pipeline.deinit();
     renderpass.deinit();
     swapchain.deinit();

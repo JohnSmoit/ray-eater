@@ -307,6 +307,10 @@ pub const Device = struct {
     pr_dev: vk.DeviceProxy,
     dev_wrapper: *vk.DeviceWrapper = undefined,
 
+    // HAve the device context manage the command pool
+    // and then all command buffers can be created using the same pool
+    h_cmd_pool: vk.CommandPool = .null_handle,
+
     fn getQueueFamilies(
         dev: vk.PhysicalDevice,
         pr_inst: *const vk.InstanceProxy,
@@ -503,18 +507,25 @@ pub const Device = struct {
 
         const dev_proxy = vk.DeviceProxy.init(logical_dev, dev_wrapper);
 
+        const cmd_pool = try dev_proxy.createCommandPool(&.{
+            .flags = .{ .reset_command_buffer_bit = true },
+            .queue_family_index = dev_queue_indices.graphics_family.?,
+        }, null);
+
         return Device{
             .ctx = parent,
             .dev_wrapper = dev_wrapper,
             .pr_dev = dev_proxy,
             .h_dev = logical_dev,
             .h_pdev = chosen_dev,
+            .h_cmd_pool = cmd_pool,
             .families = dev_queue_indices,
             .swapchain_details = swapchain_details,
         };
     }
 
     pub fn deinit(self: *Device) void {
+        self.pr_dev.destroyCommandPool(self.h_cmd_pool, null);
         self.pr_dev.destroyDevice(null);
 
         self.ctx.allocator.destroy(self.dev_wrapper);
@@ -1063,7 +1074,7 @@ pub const RenderPass = struct {
     pr_dev: *const vk.DeviceProxy,
     h_rp: vk.RenderPass,
 
-    pub fn init_from_swapchain(dev: *const Device, swapchain: *const Swapchain) !RenderPass {
+    pub fn initFromSwapchain(dev: *const Device, swapchain: *const Swapchain) !RenderPass {
         const color_attachment = vk.AttachmentDescription{
             .format = swapchain.surface_format.format,
             .samples = .{ .@"1_bit" = true },
@@ -1125,6 +1136,26 @@ pub const RenderPass = struct {
         self.pr_dev.destroyRenderPass(self.h_rp, null);
         log.debug("Successfully destroyed renderpass", .{});
     }
+
+    pub fn begin(self: *const RenderPass, cmd_buf: *const CommandBufferSet, framebuffers: *const FrameBufferSet) void {
+        const current_fb = framebuffers.current();
+        const clear_color = vk.ClearValue{ .color = .{ .float_32 = .{ 0, 0, 0, 0 } } };
+
+        self.pr_dev.cmdBeginRenderPass(cmd_buf.h_cmd_buffer, &.{
+            .render_pass = self.h_rp,
+            .framebuffer = current_fb.h_framebuffer,
+            .render_area = .{
+                .offset = .{ .x = 0, .y = 0 },
+                .extent = current_fb.extent,
+            },
+            .clear_value_count = 1,
+            .p_clear_values = util.asManyPtr(vk.ClearValue, &clear_color),
+        }, .@"inline");
+    }
+
+    pub fn end(self: *const RenderPass, cmd_buf: *const CommandBufferSet) void {
+        self.pr_dev.cmdEndRenderPass(cmd_buf.h_cmd_buffer);
+    }
 };
 
 pub const GraphicsPipeline = struct {
@@ -1139,6 +1170,9 @@ pub const GraphicsPipeline = struct {
     h_pipeline: vk.Pipeline = .null_handle,
     h_pipeline_layout: vk.PipelineLayout = .null_handle,
     pr_dev: *const vk.DeviceProxy,
+
+    viewport_info: vk.Viewport,
+    scissor_info: vk.Rect2D,
 
     pub fn init(dev: *const Device, config: *const Config, allocator: Allocator) !GraphicsPipeline {
         const pipeline_layout = dev.pr_dev.createPipelineLayout(
@@ -1199,6 +1233,8 @@ pub const GraphicsPipeline = struct {
             .h_pipeline = pipeline,
             .h_pipeline_layout = pipeline_layout,
             .pr_dev = &dev.pr_dev,
+            .viewport_info = config.fixed_functions.viewport,
+            .scissor_info = config.fixed_functions.scissor,
         };
     }
 
@@ -1208,6 +1244,123 @@ pub const GraphicsPipeline = struct {
 
         log.debug("Successfully destroyed the graphics pipeline", .{});
     }
+
+    pub fn bind(self: *const GraphicsPipeline, cmd_buf: *const CommandBufferSet) void {
+        self.pr_dev.cmdBindPipeline(cmd_buf.h_cmd_buffer, .graphics, self.h_pipeline);
+        self.pr_dev.cmdSetViewport(cmd_buf.h_cmd_buffer, 0, 1, util.asManyPtr(vk.Viewport, &self.viewport_info));
+        self.pr_dev.cmdSetScissor(cmd_buf.h_cmd_buffer, 0, 1, util.asManyPtr(vk.Rect2D, &self.scissor_info));
+    }
 };
 
+// ========================================================================
+// *********** Stuff for actually drawing stuff (finally) *****************
+// ========================================================================
 
+/// ## Usage
+/// This is a set of framebuffers, corresponding to the images of a swapchain
+/// rather than having a singular framebuffer wrapper.
+///
+/// Implementationwise since we have no idea how many framebuffers we'll need
+/// at compile time
+/// due to the varying amount of swapchain image views, memory allocation
+/// is unfortunately necessary.
+/// ## Notes
+/// OK, so the difference between a framebuffer and a swapchain
+/// image view is that the framebuffer combines all views for a particular
+/// image into a holistic view of all the attachments (i.e color, depth, stencil)
+/// all in one... Methinks this is also closer to where the actual image memory is
+/// behind the scenes and stuff...
+pub const FrameBufferSet = struct {
+    pub const Config = struct {
+        renderpass: *const RenderPass,
+        image_views: []const Swapchain.ImageInfo,
+        extent: struct { //TODO: Make vector and other mathematical types
+            x: u32,
+            y: u32,
+        },
+    };
+
+    framebuffers: []vk.Framebuffer,
+    pr_dev: *const vk.DeviceProxy,
+    allocator: Allocator,
+
+    /// ## Notes
+    /// Unfortunately, allocation is neccesary due to the runtime count of the swapchain
+    /// images
+    pub fn initAlloc(dev: *const Device, allocator: Allocator, config: *const Config) !FrameBufferSet {
+        var framebuffers = try allocator.alloc(vk.Framebuffer, config.image_views.len);
+
+        for (config.image_views, 0..) |*info, index| {
+            framebuffers[index] = try dev.pr_dev.createFramebuffer(&.{
+                .render_pass = config.renderpass.h_rp,
+                .attachment_count = 1,
+                .p_attachments = util.asManyPtr(vk.ImageView, &info.h_view),
+                .width = config.extent.x,
+                .height = config.extent.y,
+                .layers = 1,
+            }, null);
+        }
+
+        return .{
+            .framebuffers = framebuffers,
+            .pr_dev = &dev.pr_dev,
+            .allocator = allocator,
+        };
+    }
+
+    pub fn deinit(self: *const FrameBufferSet) void {
+        for (self.framebuffers) |fb| {
+            self.pr_dev.destroyFramebuffer(fb, null);
+        }
+    }
+};
+
+pub const CommandBufferSet = struct {
+    pub const log = global_log.scoped(.command_buffer);
+    h_cmd_buffer: vk.CommandBuffer,
+    pr_dev: vk.DeviceProxy,
+
+    pub fn init(dev: *const Device) !CommandBufferSet {
+        var cmd_buffer: vk.CommandBuffer = undefined;
+        dev.pr_dev.allocateCommandBuffers(
+            &.{
+                .command_pool = dev.h_cmd_pool,
+                .level = .primary,
+                .command_buffer_count = 1,
+            },
+            @constCast(util.asManyPtr(vk.CommandBuffer, &cmd_buffer)),
+        ) catch |err| {
+            log.err("Error occured allocating command buffer: {!}", .{err});
+            return err;
+        };
+
+        return .{
+            .h_cmd_buffer = cmd_buffer,
+            .pr_dev = &dev.pr_dev,
+        };
+    }
+
+    pub fn begin(self: *const CommandBufferSet) !void {
+        self.pr_dev.beginCommandBuffer(self.h_cmd_buffer, &.{
+            .flags = 0,
+            .p_inheritance_info = null,
+        }) catch |err| {
+            log.err("Failed to start recording command buffer: {!}", .{err});
+            return err;
+        };
+    }
+
+    pub fn end(self: *const CommandBufferSet) !void {
+        self.pr_dev.endCommandBuffer(self.h_cmd_buffer) catch |err| {
+            log.err("Command recording failed: {!}", .{err});
+            return err;
+        };
+    }
+
+    pub fn reset(self: *const CommandBufferSet) !void {
+        self.pr_dev.resetCommandBuffer(self.h_cmd_buffer, 0) catch |err| {
+            log.err("Error resetting command buffer: {!}", .{err});
+            return err;
+        };
+    }
+};
