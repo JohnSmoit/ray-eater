@@ -3,6 +3,7 @@
 //! start with main.zig instead.
 const std = @import("std");
 const api = @import("api/vulkan.zig");
+const shader = @import("api/shader.zig");
 
 // Another nasty import to keep extension names intact
 const vk = @import("vulkan");
@@ -37,6 +38,10 @@ var swapchain: api.Swapchain = undefined;
 
 var window_handle: ?*glfw.Window = null;
 
+var renderpass: api.RenderPass = undefined;
+
+var graphics_pipeline: api.GraphicsPipeline = undefined;
+
 const validation_layers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
 
@@ -46,6 +51,12 @@ fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
 
 pub fn testInit(allocator: Allocator) !void {
     _ = glfw.setErrorCallback(glfwErrorCallback);
+
+    // scratch (Arena) allocator for memory stuff
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const scratch = arena.allocator();
+
     var extensions = std.ArrayList([*:0]const u8).init(allocator);
     defer extensions.deinit();
 
@@ -98,6 +109,45 @@ pub fn testInit(allocator: Allocator) !void {
         },
     });
     errdefer swapchain.deinit();
+
+    // test create shader modules and stuff
+    const vert_shader_module = try shader.Module.from_source_file(
+        .Vertex,
+        "shaders/shader.vert",
+        &device,
+    );
+    defer vert_shader_module.deinit();
+    const frag_shader_module = try shader.Module.from_source_file(
+        .Fragment,
+        "shaders/shader.frag",
+        &device,
+    );
+    defer frag_shader_module.deinit();
+
+    // test create fixed function pipeline state
+    const dynamic_states = [_]vk.DynamicState{
+        .viewport,
+        .scissor,
+    };
+
+    var fixed_function_state = api.FixedFunctionState{};
+    fixed_function_state.init_self(&device, &.{
+        .viewport = .{ .Swapchain = &swapchain },
+        .dynamic_states = &dynamic_states,
+        .deez_nuts = true,
+    });
+    defer fixed_function_state.deinit();
+
+    // test create render pass state and stuff i guess
+    renderpass = try api.RenderPass.init_from_swapchain(&device, &swapchain);
+    errdefer renderpass.deinit();
+
+    graphics_pipeline = try api.GraphicsPipeline.init(&device, &.{
+        .renderpass = &renderpass,
+        .fixed_functions = &fixed_function_state,
+        .shader_stages = &[_]shader.Module{ vert_shader_module, frag_shader_module },
+    }, scratch);
+    errdefer graphics_pipeline.deinit();
 }
 
 pub fn setWindow(window: *glfw.Window) void {
@@ -111,6 +161,8 @@ pub fn setRequiredExtensions(names: [][*:0]const u8) void {
 pub fn testLoop() !void {}
 
 pub fn testDeinit() void {
+    graphics_pipeline.deinit();
+    renderpass.deinit();
     swapchain.deinit();
     graphics_queue.deinit();
     present_queue.deinit();
