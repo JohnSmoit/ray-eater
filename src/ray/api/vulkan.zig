@@ -343,7 +343,7 @@ pub const Device = struct {
                 dev,
                 i,
                 surface.h_surface,
-            ) catch vk.FALSE) == vk.FALSE) {
+            ) catch vk.FALSE) == vk.TRUE) {
                 found_indices.present_family = i;
             }
         }
@@ -541,6 +541,27 @@ pub const Device = struct {
 
         return self.pr_dev.getDeviceQueue(family_index, 0);
     }
+
+    pub fn draw(
+        self: *const Device,
+        cmd_buf: *const CommandBufferSet,
+        vert_count: u32,
+        inst_count: u32,
+        first_vert: u32,
+        first_inst: u32,
+    ) void {
+        self.pr_dev.cmdDraw(
+            cmd_buf.h_cmd_buffer,
+            vert_count,
+            inst_count,
+            first_vert,
+            first_inst,
+        );
+    }
+
+    pub fn waitIdle(self: *const Device) !void {
+        try self.pr_dev.deviceWaitIdle();
+    }
 };
 
 // ==================================
@@ -579,6 +600,54 @@ pub fn GenericQueue(comptime p_family: QueueFamily) type {
             // TODO: Annihilate queue
 
             _ = self;
+        }
+
+        pub fn submit(
+            self: *const Self,
+            cmd_buf: *const CommandBufferSet,
+            sem_wait: ?vk.Semaphore,
+            sem_sig: ?vk.Semaphore,
+            fence_wait: ?vk.Fence,
+        ) !void {
+            const wait_stages = [_]vk.PipelineStageFlags{.{ .color_attachment_output_bit = true }};
+            const submit_info = vk.SubmitInfo{
+                .command_buffer_count = 1,
+                .p_command_buffers = util.asManyPtr(
+                    vk.CommandBuffer,
+                    &cmd_buf.h_cmd_buffer,
+                ),
+                .wait_semaphore_count = if (sem_wait != null) 1 else 0,
+                .p_wait_semaphores = util.asManyPtr(vk.Semaphore, &(sem_wait orelse .null_handle)),
+                .p_wait_dst_stage_mask = &wait_stages,
+
+                .signal_semaphore_count = if (sem_sig != null) 1 else 0,
+                .p_signal_semaphores = util.asManyPtr(vk.Semaphore, &(sem_sig orelse .null_handle)),
+            };
+            try self.dev.pr_dev.queueSubmit(
+                self.h_queue,
+                1,
+                util.asManyPtr(
+                    vk.SubmitInfo,
+                    &submit_info,
+                ),
+                fence_wait orelse .null_handle,
+            );
+        }
+
+        pub fn present(
+            self: *const Self,
+            swapchain: *const Swapchain,
+            image_index: u32,
+            sem_wait: ?vk.Semaphore,
+        ) !void {
+            _ = try self.dev.pr_dev.queuePresentKHR(self.h_queue, &.{
+                .wait_semaphore_count = if (sem_wait != null) 1 else 0,
+                .p_wait_semaphores = util.asManyPtr(vk.Semaphore, &(sem_wait orelse .null_handle)),
+                .swapchain_count = 1,
+                .p_swapchains = util.asManyPtr(vk.SwapchainKHR, &swapchain.h_swapchain),
+                .p_image_indices = util.asManyPtr(u32, &image_index),
+                .p_results = null,
+            });
         }
     };
 }
@@ -655,7 +724,8 @@ pub const Swapchain = struct {
             }
         }
 
-        log.debug("chose present mode: {s}", .{@tagName(chosen_format.?.format)});
+        log.debug("chose surface format: {s}", .{@tagName(chosen_format.?.format)});
+        log.debug("Chose color space: {s}", .{@tagName(chosen_format.?.color_space)});
 
         return chosen_format orelse error.NoSuitableFormat;
     }
@@ -840,6 +910,17 @@ pub const Swapchain = struct {
 
         // NOTE: The image handles are owned by the swapchain and therefore shouold not be destroyed by me.
         self.dev.pr_dev.destroySwapchainKHR(self.h_swapchain, null);
+    }
+
+    pub fn getNextImage(self: *const Swapchain, sem_signal: ?vk.Semaphore, fence_signal: ?vk.Fence) !u32 {
+        const res = try self.dev.pr_dev.acquireNextImageKHR(
+            self.h_swapchain,
+            std.math.maxInt(u64),
+            sem_signal orelse .null_handle,
+            fence_signal orelse .null_handle,
+        );
+
+        return res.image_index;
     }
 };
 
@@ -1114,11 +1195,26 @@ pub const RenderPass = struct {
             .pipeline_bind_point = .graphics,
         };
 
+        const subpass_dep = vk.SubpassDependency{
+            .src_subpass = vk.SUBPASS_EXTERNAL,
+            .dst_subpass = 0,
+
+            .src_stage_mask = .{ .color_attachment_output_bit = true },
+            .src_access_mask = .{},
+
+            .dst_stage_mask = .{ .color_attachment_output_bit = true },
+            .dst_access_mask = .{ .color_attachment_write_bit = true },
+        };
+
         const renderpass = dev.pr_dev.createRenderPass(&.{
             .attachment_count = 1,
             .p_attachments = util.asManyPtr(vk.AttachmentDescription, &color_attachment),
+
             .subpass_count = 1,
             .p_subpasses = util.asManyPtr(vk.SubpassDescription, &subpass_desc),
+
+            .dependency_count = 1,
+            .p_dependencies = util.asManyPtr(vk.SubpassDependency, &subpass_dep),
         }, null) catch |err| {
             log.err("Failed to create render pass: {!}", .{err});
             return err;
@@ -1137,17 +1233,14 @@ pub const RenderPass = struct {
         log.debug("Successfully destroyed renderpass", .{});
     }
 
-    pub fn begin(self: *const RenderPass, cmd_buf: *const CommandBufferSet, framebuffers: *const FrameBufferSet) void {
-        const current_fb = framebuffers.current();
+    pub fn begin(self: *const RenderPass, cmd_buf: *const CommandBufferSet, framebuffers: *const FrameBufferSet, image_index: u32) void {
+        const current_fb = framebuffers.get(image_index);
         const clear_color = vk.ClearValue{ .color = .{ .float_32 = .{ 0, 0, 0, 0 } } };
 
         self.pr_dev.cmdBeginRenderPass(cmd_buf.h_cmd_buffer, &.{
             .render_pass = self.h_rp,
             .framebuffer = current_fb.h_framebuffer,
-            .render_area = .{
-                .offset = .{ .x = 0, .y = 0 },
-                .extent = current_fb.extent,
-            },
+            .render_area = current_fb.extent,
             .clear_value_count = 1,
             .p_clear_values = util.asManyPtr(vk.ClearValue, &clear_color),
         }, .@"inline");
@@ -1271,18 +1364,17 @@ pub const GraphicsPipeline = struct {
 /// all in one... Methinks this is also closer to where the actual image memory is
 /// behind the scenes and stuff...
 pub const FrameBufferSet = struct {
+    pub const FrameBufferInfo = struct { h_framebuffer: vk.Framebuffer, extent: vk.Rect2D };
     pub const Config = struct {
         renderpass: *const RenderPass,
         image_views: []const Swapchain.ImageInfo,
-        extent: struct { //TODO: Make vector and other mathematical types
-            x: u32,
-            y: u32,
-        },
+        extent: vk.Rect2D,
     };
 
     framebuffers: []vk.Framebuffer,
     pr_dev: *const vk.DeviceProxy,
     allocator: Allocator,
+    extent: vk.Rect2D,
 
     /// ## Notes
     /// Unfortunately, allocation is neccesary due to the runtime count of the swapchain
@@ -1295,8 +1387,8 @@ pub const FrameBufferSet = struct {
                 .render_pass = config.renderpass.h_rp,
                 .attachment_count = 1,
                 .p_attachments = util.asManyPtr(vk.ImageView, &info.h_view),
-                .width = config.extent.x,
-                .height = config.extent.y,
+                .width = config.extent.extent.width,
+                .height = config.extent.extent.height,
                 .layers = 1,
             }, null);
         }
@@ -1305,6 +1397,14 @@ pub const FrameBufferSet = struct {
             .framebuffers = framebuffers,
             .pr_dev = &dev.pr_dev,
             .allocator = allocator,
+            .extent = config.extent,
+        };
+    }
+
+    pub fn get(self: *const FrameBufferSet, image_index: u32) FrameBufferInfo {
+        return FrameBufferInfo{
+            .h_framebuffer = self.framebuffers[@intCast(image_index)],
+            .extent = self.extent,
         };
     }
 
@@ -1318,7 +1418,7 @@ pub const FrameBufferSet = struct {
 pub const CommandBufferSet = struct {
     pub const log = global_log.scoped(.command_buffer);
     h_cmd_buffer: vk.CommandBuffer,
-    pr_dev: vk.DeviceProxy,
+    pr_dev: *const vk.DeviceProxy,
 
     pub fn init(dev: *const Device) !CommandBufferSet {
         var cmd_buffer: vk.CommandBuffer = undefined;
@@ -1342,7 +1442,7 @@ pub const CommandBufferSet = struct {
 
     pub fn begin(self: *const CommandBufferSet) !void {
         self.pr_dev.beginCommandBuffer(self.h_cmd_buffer, &.{
-            .flags = 0,
+            .flags = .{},
             .p_inheritance_info = null,
         }) catch |err| {
             log.err("Failed to start recording command buffer: {!}", .{err});
@@ -1358,7 +1458,7 @@ pub const CommandBufferSet = struct {
     }
 
     pub fn reset(self: *const CommandBufferSet) !void {
-        self.pr_dev.resetCommandBuffer(self.h_cmd_buffer, 0) catch |err| {
+        self.pr_dev.resetCommandBuffer(self.h_cmd_buffer, .{}) catch |err| {
             log.err("Error resetting command buffer: {!}", .{err});
             return err;
         };

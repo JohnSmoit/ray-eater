@@ -3,6 +3,8 @@
 //! start with main.zig instead.
 const std = @import("std");
 const api = @import("api/vulkan.zig");
+const util = @import("util.zig");
+
 const shader = @import("api/shader.zig");
 
 // Another nasty import to keep extension names intact
@@ -19,7 +21,7 @@ const Allocator = std.mem.Allocator;
 // use a bunch of bullshit global state to test VkInstance creation
 pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0]const u8) callconv(.c) vk.PfnVoidFunction);
 
-const root_log = std.log;
+const root_log = std.log.scoped(.root);
 const glfw_log = std.log.scoped(.glfw);
 
 // vulkan loader function (i.e glfwGetProcAddress) in charge of finding vulkan API symbols in the first place
@@ -43,10 +45,15 @@ var renderpass: api.RenderPass = undefined;
 var graphics_pipeline: api.GraphicsPipeline = undefined;
 
 // rendering stuff
-var framebuffers: api.FramebufferSet = undefined;
+var framebuffers: api.FrameBufferSet = undefined;
+var command_buffer: api.CommandBufferSet = undefined;
 
 const validation_layers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
+
+var render_finished_semaphore: vk.Semaphore = .null_handle;
+var image_finished_semaphore: vk.Semaphore = .null_handle;
+var present_finished_fence: vk.Fence = .null_handle;
 
 fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
     glfw_log.err("error code {d} -- Message: {s}", .{ code, desc });
@@ -153,15 +160,26 @@ pub fn testInit(allocator: Allocator) !void {
     }, scratch);
     errdefer graphics_pipeline.deinit();
 
-    framebuffers = try api.FramebufferSet.initAlloc(&device, allocator, &.{
+    framebuffers = try api.FrameBufferSet.initAlloc(&device, allocator, &.{
         .renderpass = &renderpass,
         .image_views = swapchain.images,
-        .extent = .{
-            .x = swapchain.extent.width,
-            .y = swapchain.extent.height,
-        }
+        .extent = vk.Rect2D{
+            .extent = swapchain.extent,
+            .offset = .{.x = 0, .y = 0},
+        },
     });
     errdefer framebuffers.deinit();
+
+    // create a bunch of stupid synchronization objects and stuff
+    // I didn't really integrate these into the wrapper structs cuz i kinda don't really
+    // know where to put them
+    render_finished_semaphore = try device.pr_dev.createSemaphore(&.{}, null);
+    image_finished_semaphore = try device.pr_dev.createSemaphore(&.{}, null);
+    present_finished_fence = try device.pr_dev.createFence(&.{
+        .flags = .{ .signaled_bit = true },
+    }, null);
+
+    command_buffer = try api.CommandBufferSet.init(&device);
 }
 
 pub fn setWindow(window: *glfw.Window) void {
@@ -172,9 +190,57 @@ pub fn setRequiredExtensions(names: [][*:0]const u8) void {
     external_extensions = names;
 }
 
-pub fn testLoop() !void {}
+pub fn testLoop() !void {
+    _ = device.pr_dev.waitForFences(
+        1,
+        util.asManyPtr(vk.Fence, &present_finished_fence),
+        vk.TRUE,
+        std.math.maxInt(u64),
+    ) catch {}; // fuck rendering errors
+
+    device.pr_dev.resetFences(
+        1,
+        util.asManyPtr(vk.Fence, &present_finished_fence),
+    ) catch {};
+
+    const current_image = try swapchain.getNextImage(image_finished_semaphore, null);
+
+    try command_buffer.reset();
+
+    try command_buffer.begin();
+    renderpass.begin(&command_buffer, &framebuffers, current_image);
+
+    graphics_pipeline.bind(&command_buffer);
+
+    device.draw(&command_buffer, 3, 1, 0, 0);
+
+    renderpass.end(&command_buffer);
+
+    try command_buffer.end();
+
+    try graphics_queue.submit(
+        &command_buffer,
+        image_finished_semaphore,
+        render_finished_semaphore,
+        present_finished_fence,
+    );
+
+    try present_queue.present(
+        &swapchain,
+        current_image,
+        render_finished_semaphore,
+    );
+}
 
 pub fn testDeinit() void {
+    device.waitIdle() catch {
+       root_log.err("Failed to wait on device", .{}); 
+    };
+    // destroy synchronization objects
+    device.pr_dev.destroySemaphore(render_finished_semaphore, null);
+    device.pr_dev.destroySemaphore(image_finished_semaphore, null);
+    device.pr_dev.destroyFence(present_finished_fence, null);
+
     framebuffers.deinit();
     graphics_pipeline.deinit();
     renderpass.deinit();
