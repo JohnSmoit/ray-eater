@@ -6,6 +6,8 @@ const api = @import("api/vulkan.zig");
 const util = @import("util.zig");
 
 const shader = @import("api/shader.zig");
+const buffer = @import("api/buffer.zig");
+const meth = @import("math.zig");
 
 // Another nasty import to keep extension names intact
 const vk = @import("vulkan");
@@ -54,6 +56,18 @@ const device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
 var render_finished_semaphore: vk.Semaphore = .null_handle;
 var image_finished_semaphore: vk.Semaphore = .null_handle;
 var present_finished_fence: vk.Fence = .null_handle;
+
+const TestVertexInput = extern struct {
+    position: meth.Vec2,
+    color: meth.Vec3,
+};
+
+const TestInputVertexBuffer = buffer.GenericBuffer(
+    TestVertexInput,
+    .{ .vertex_buffer_bit = true },
+);
+
+var vertex_buffer: TestInputVertexBuffer = undefined;
 
 fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
     glfw_log.err("error code {d} -- Message: {s}", .{ code, desc });
@@ -146,6 +160,8 @@ pub fn testInit(allocator: Allocator) !void {
         .viewport = .{ .Swapchain = &swapchain },
         .dynamic_states = &dynamic_states,
         .deez_nuts = true,
+        .vertex_binding = TestInputVertexBuffer.Description.vertex_desc,
+        .vertex_attribs = TestInputVertexBuffer.Description.attrib_desc,
     });
     defer fixed_function_state.deinit();
 
@@ -165,7 +181,7 @@ pub fn testInit(allocator: Allocator) !void {
         .image_views = swapchain.images,
         .extent = vk.Rect2D{
             .extent = swapchain.extent,
-            .offset = .{.x = 0, .y = 0},
+            .offset = .{ .x = 0, .y = 0 },
         },
     });
     errdefer framebuffers.deinit();
@@ -180,6 +196,23 @@ pub fn testInit(allocator: Allocator) !void {
     }, null);
 
     command_buffer = try api.CommandBufferSet.init(&device);
+
+    // test vertex data and stuff
+    const vertex_data = [_]TestVertexInput{
+        .{ .position = meth.nVec(.{ 0.0, -0.5 }), .color = meth.nVec(.{ 1.0, 1.0, 1.0 }) },
+        .{ .position = meth.nVec(.{ 0.5, 0.5 }), .color = meth.nVec(.{ 0.0, 1.0, 0.0 }) },
+        .{ .position = meth.nVec(.{ -0.5, 0.5 }), .color = meth.nVec(.{ 0.0, 0.0, 1.0 }) },
+    };
+
+    vertex_buffer = TestInputVertexBuffer.create(&device, vertex_data.len) catch |err| {
+        root_log.err("Failed to initialize vertex buffer: {!}", .{err});
+        return err;
+    };
+
+    vertex_buffer.setData(&vertex_data) catch |err| {
+        root_log.err("Failed to load vertex data: {!}", .{err});
+        return err;
+    };
 }
 
 pub fn setWindow(window: *glfw.Window) void {
@@ -212,6 +245,8 @@ pub fn testLoop() !void {
 
     graphics_pipeline.bind(&command_buffer);
 
+    vertex_buffer.bind(&command_buffer);
+
     device.draw(&command_buffer, 3, 1, 0, 0);
 
     renderpass.end(&command_buffer);
@@ -234,13 +269,14 @@ pub fn testLoop() !void {
 
 pub fn testDeinit() void {
     device.waitIdle() catch {
-       root_log.err("Failed to wait on device", .{}); 
+        root_log.err("Failed to wait on device", .{});
     };
     // destroy synchronization objects
     device.pr_dev.destroySemaphore(render_finished_semaphore, null);
     device.pr_dev.destroySemaphore(image_finished_semaphore, null);
     device.pr_dev.destroyFence(present_finished_fence, null);
 
+    vertex_buffer.deinit();
     framebuffers.deinit();
     graphics_pipeline.deinit();
     renderpass.deinit();

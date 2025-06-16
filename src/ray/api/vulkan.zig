@@ -532,6 +532,10 @@ pub const Device = struct {
         self.swapchain_details.deinit();
     }
 
+    pub fn getMemProperties(self: *const Device) vk.PhysicalDeviceMemoryProperties {
+        return self.ctx.pr_inst.getPhysicalDeviceMemoryProperties(self.h_pdev);
+    }
+
     fn getQueueHandle(self: *const Device, family: QueueFamily) ?vk.Queue {
         const family_index = switch (family) {
             .Graphics => self.families.graphics_family orelse return null,
@@ -967,6 +971,8 @@ pub const FixedFunctionState = struct {
                 scissor: vk.Rect2D,
             }
         },
+        vertex_binding: vk.VertexInputBindingDescription,
+        vertex_attribs: []const vk.VertexInputAttributeDescription,
         deez_nuts: bool = false,
     };
 
@@ -1006,10 +1012,13 @@ pub const FixedFunctionState = struct {
 
         // temporary vertex input state for now
         self.vertex_input = vk.PipelineVertexInputStateCreateInfo{
-            .vertex_binding_description_count = 0,
-            .p_vertex_binding_descriptions = null,
-            .vertex_attribute_description_count = 0,
-            .p_vertex_attribute_descriptions = null,
+            .vertex_binding_description_count = 1,
+            .p_vertex_binding_descriptions = util.asManyPtr(
+                vk.VertexInputBindingDescription,
+                &config.vertex_binding,
+            ),
+            .vertex_attribute_description_count = @intCast(config.vertex_attribs.len),
+            .p_vertex_attribute_descriptions = config.vertex_attribs.ptr,
         };
 
         self.input_assembly = vk.PipelineInputAssemblyStateCreateInfo{
