@@ -22,7 +22,7 @@ fn resolveVec(comptime args: anytype) type {
 
 /// Creates an N-dimensional vector based on the number and types of arguments
 /// specified in the args tuple
-pub fn nVec(comptime args: anytype) resolveVec(args) {
+pub fn vec(comptime args: anytype) resolveVec(args) {
     return switch (args.len) {
         2 => Vec2{ .x = args[0], .y = args[1] },
         3 => Vec3{ .x = args[0], .y = args[1], .z = args[2] },

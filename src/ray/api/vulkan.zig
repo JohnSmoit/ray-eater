@@ -536,7 +536,7 @@ pub const Device = struct {
         return self.ctx.pr_inst.getPhysicalDeviceMemoryProperties(self.h_pdev);
     }
 
-    fn getQueueHandle(self: *const Device, family: QueueFamily) ?vk.Queue {
+    pub fn getQueueHandle(self: *const Device, family: QueueFamily) ?vk.Queue {
         const family_index = switch (family) {
             .Graphics => self.families.graphics_family orelse return null,
             .Present => self.families.present_family orelse return null,
@@ -560,6 +560,25 @@ pub const Device = struct {
             inst_count,
             first_vert,
             first_inst,
+        );
+    }
+
+    pub fn drawIndexed(
+        self: *const Device,
+        cmd_buf: *const CommandBufferSet,
+        index_count: u32,
+        instance_count: u32,
+        first_index: u32,
+        vertex_offset: i32,
+        first_instance: u32,
+    ) void {
+        self.pr_dev.cmdDrawIndexed(
+            cmd_buf.h_cmd_buffer,
+            index_count,
+            instance_count,
+            first_index,
+            vertex_offset,
+            first_instance,
         );
     }
 
@@ -636,6 +655,10 @@ pub fn GenericQueue(comptime p_family: QueueFamily) type {
                 ),
                 fence_wait orelse .null_handle,
             );
+        }
+
+        pub fn waitIdle(self: *const Self) void {
+            self.dev.pr_dev.queueWaitIdle(self.h_queue) catch {};
         }
 
         pub fn present(
@@ -1427,6 +1450,8 @@ pub const FrameBufferSet = struct {
 pub const CommandBufferSet = struct {
     pub const log = global_log.scoped(.command_buffer);
     h_cmd_buffer: vk.CommandBuffer,
+    h_cmd_pool: vk.CommandPool,
+
     pr_dev: *const vk.DeviceProxy,
 
     pub fn init(dev: *const Device) !CommandBufferSet {
@@ -1445,13 +1470,25 @@ pub const CommandBufferSet = struct {
 
         return .{
             .h_cmd_buffer = cmd_buffer,
+            .h_cmd_pool = dev.h_cmd_pool,
             .pr_dev = &dev.pr_dev,
         };
     }
 
+    pub fn oneShot(dev: *const Device) !CommandBufferSet {
+        const buf = try init(dev);
+
+        try buf.beginConfig(.{ .one_time_submit_bit = true });
+        return buf;
+    }
+
     pub fn begin(self: *const CommandBufferSet) !void {
+        try self.beginConfig(.{});
+    }
+
+    pub fn beginConfig(self: *const CommandBufferSet, flags: vk.CommandBufferUsageFlags) !void {
         self.pr_dev.beginCommandBuffer(self.h_cmd_buffer, &.{
-            .flags = .{},
+            .flags = flags,
             .p_inheritance_info = null,
         }) catch |err| {
             log.err("Failed to start recording command buffer: {!}", .{err});
@@ -1471,5 +1508,13 @@ pub const CommandBufferSet = struct {
             log.err("Error resetting command buffer: {!}", .{err});
             return err;
         };
+    }
+
+    pub fn deinit(self: *const CommandBufferSet) void {
+        self.pr_dev.freeCommandBuffers(
+            self.h_cmd_pool,
+            1,
+            util.asManyPtr(vk.CommandBuffer, &self.h_cmd_buffer),
+        );
     }
 };

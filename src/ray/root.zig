@@ -64,10 +64,28 @@ const TestVertexInput = extern struct {
 
 const TestInputVertexBuffer = buffer.GenericBuffer(
     TestVertexInput,
-    .{ .vertex_buffer_bit = true },
+    .{
+        .usage = .{
+            .vertex_buffer_bit = true,
+            .transfer_dst_bit = true,
+        },
+        .memory = .{ .device_local_bit = true },
+    },
+);
+
+const TestIndexBuffer = buffer.GenericBuffer(
+    u16,
+    .{
+        .usage = .{
+            .index_buffer_bit = true,
+            .transfer_dst_bit = true,
+        },
+        .memory = .{ .device_local_bit = true },
+    },
 );
 
 var vertex_buffer: TestInputVertexBuffer = undefined;
+var index_buffer: TestIndexBuffer = undefined;
 
 fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
     glfw_log.err("error code {d} -- Message: {s}", .{ code, desc });
@@ -199,18 +217,32 @@ pub fn testInit(allocator: Allocator) !void {
 
     // test vertex data and stuff
     const vertex_data = [_]TestVertexInput{
-        .{ .position = meth.nVec(.{ 0.0, -0.5 }), .color = meth.nVec(.{ 1.0, 1.0, 1.0 }) },
-        .{ .position = meth.nVec(.{ 0.5, 0.5 }), .color = meth.nVec(.{ 0.0, 1.0, 0.0 }) },
-        .{ .position = meth.nVec(.{ -0.5, 0.5 }), .color = meth.nVec(.{ 0.0, 0.0, 1.0 }) },
+        .{ .position = meth.vec(.{ -1.0, -1.0 }), .color = meth.vec(.{ 1.0, 0.0, 0.0 }) },
+        .{ .position = meth.vec(.{ 1.0, -1.0 }), .color = meth.vec(.{ 0.0, 1.0, 0.0 }) },
+        .{ .position = meth.vec(.{ 1.0, 1.0 }), .color = meth.vec(.{ 0.0, 0.0, 1.0 }) },
+        .{ .position = meth.vec(.{ -1.0, 1.0 }), .color = meth.vec(.{ 1.0, 1.0, 1.0 }) },
     };
 
     vertex_buffer = TestInputVertexBuffer.create(&device, vertex_data.len) catch |err| {
         root_log.err("Failed to initialize vertex buffer: {!}", .{err});
         return err;
     };
+    errdefer vertex_buffer.deinit();
 
-    vertex_buffer.setData(&vertex_data) catch |err| {
+    vertex_buffer.setDataStaged(&vertex_data) catch |err| {
         root_log.err("Failed to load vertex data: {!}", .{err});
+        return err;
+    };
+
+    const index_data = [_]u16{ 0, 1, 2, 2, 3, 0 };
+
+    index_buffer = TestIndexBuffer.create(&device, index_data.len) catch |err| {
+        root_log.err("Failed to initialize index buffer: {!}", .{err});
+        return err;
+    };
+
+    index_buffer.setDataStaged(&index_data) catch |err| {
+        root_log.err("Failed to load index buffer data: {!}", .{err});
         return err;
     };
 }
@@ -246,8 +278,9 @@ pub fn testLoop() !void {
     graphics_pipeline.bind(&command_buffer);
 
     vertex_buffer.bind(&command_buffer);
+    index_buffer.veryStupidBindingSpecificallyForIndexBuffersUntilIGetGenericBuffersWorking(&command_buffer);
 
-    device.draw(&command_buffer, 3, 1, 0, 0);
+    device.drawIndexed(&command_buffer, 6, 1, 0, 0, 0);
 
     renderpass.end(&command_buffer);
 
@@ -276,6 +309,7 @@ pub fn testDeinit() void {
     device.pr_dev.destroySemaphore(image_finished_semaphore, null);
     device.pr_dev.destroyFence(present_finished_fence, null);
 
+    index_buffer.deinit();
     vertex_buffer.deinit();
     framebuffers.deinit();
     graphics_pipeline.deinit();
