@@ -9,6 +9,10 @@ const shader = @import("api/shader.zig");
 const buffer = @import("api/buffer.zig");
 const meth = @import("math.zig");
 
+const vb = @import("api/vertex_buffer.zig");
+const ib = @import("api/index_buffer.zig");
+const ub = @import("api/uniform.zig");
+
 // Another nasty import to keep extension names intact
 const vk = @import("vulkan");
 const glfw = @import("glfw");
@@ -62,30 +66,14 @@ const TestVertexInput = extern struct {
     color: meth.Vec3,
 };
 
-const TestInputVertexBuffer = buffer.GenericBuffer(
-    TestVertexInput,
-    .{
-        .usage = .{
-            .vertex_buffer_bit = true,
-            .transfer_dst_bit = true,
-        },
-        .memory = .{ .device_local_bit = true },
-    },
-);
+const VertexBuffer = vb.VertexBuffer(TestVertexInput);
+const IndexBuffer = ib.IndexBuffer(u16);
 
-const TestIndexBuffer = buffer.GenericBuffer(
-    u16,
-    .{
-        .usage = .{
-            .index_buffer_bit = true,
-            .transfer_dst_bit = true,
-        },
-        .memory = .{ .device_local_bit = true },
-    },
-);
+var vertex_buffer: VertexBuffer = undefined;
+var index_buffer: IndexBuffer = undefined;
 
-var vertex_buffer: TestInputVertexBuffer = undefined;
-var index_buffer: TestIndexBuffer = undefined;
+var vb_interface: buffer.AnyBuffer = undefined;
+var ib_interface: buffer.AnyBuffer = undefined;
 
 fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
     glfw_log.err("error code {d} -- Message: {s}", .{ code, desc });
@@ -178,8 +166,8 @@ pub fn testInit(allocator: Allocator) !void {
         .viewport = .{ .Swapchain = &swapchain },
         .dynamic_states = &dynamic_states,
         .deez_nuts = true,
-        .vertex_binding = TestInputVertexBuffer.Description.vertex_desc,
-        .vertex_attribs = TestInputVertexBuffer.Description.attrib_desc,
+        .vertex_binding = VertexBuffer.Description.vertex_desc,
+        .vertex_attribs = VertexBuffer.Description.attrib_desc,
     });
     defer fixed_function_state.deinit();
 
@@ -217,31 +205,38 @@ pub fn testInit(allocator: Allocator) !void {
 
     // test vertex data and stuff
     const vertex_data = [_]TestVertexInput{
-        .{ .position = meth.vec(.{ -1.0, -1.0 }), .color = meth.vec(.{ 1.0, 0.0, 0.0 }) },
-        .{ .position = meth.vec(.{ 1.0, -1.0 }), .color = meth.vec(.{ 0.0, 1.0, 0.0 }) },
-        .{ .position = meth.vec(.{ 1.0, 1.0 }), .color = meth.vec(.{ 0.0, 0.0, 1.0 }) },
-        .{ .position = meth.vec(.{ -1.0, 1.0 }), .color = meth.vec(.{ 1.0, 1.0, 1.0 }) },
+        .{ .position = meth.vec(.{ -0.5, -0.5 }), .color = meth.vec(.{ 1.0, 0.0, 0.0 }) },
+        .{ .position = meth.vec(.{ 0.5, -0.5 }), .color = meth.vec(.{ 0.0, 1.0, 0.0 }) },
+        .{ .position = meth.vec(.{ 0.5, 0.5 }), .color = meth.vec(.{ 0.0, 0.0, 1.0 }) },
+        .{ .position = meth.vec(.{ -0.5, 0.5 }), .color = meth.vec(.{ 1.0, 1.0, 1.0 }) },
     };
 
-    vertex_buffer = TestInputVertexBuffer.create(&device, vertex_data.len) catch |err| {
+    vertex_buffer = VertexBuffer.create(&device, vertex_data.len) catch |err| {
         root_log.err("Failed to initialize vertex buffer: {!}", .{err});
         return err;
     };
-    errdefer vertex_buffer.deinit();
+    // TODO: Interface casting shouldn't be required to use basic member functions lol
+    // This literally sucks ass I don't care how cursed the implementation is,
+    // it should not require this
+    vb_interface = vertex_buffer.buffer();
+    errdefer vb_interface.deinit();
 
-    vertex_buffer.setDataStaged(&vertex_data) catch |err| {
+    vb_interface.setData(vertex_data[0..]) catch |err| {
         root_log.err("Failed to load vertex data: {!}", .{err});
         return err;
     };
 
     const index_data = [_]u16{ 0, 1, 2, 2, 3, 0 };
 
-    index_buffer = TestIndexBuffer.create(&device, index_data.len) catch |err| {
+    index_buffer = IndexBuffer.create(&device, index_data.len) catch |err| {
         root_log.err("Failed to initialize index buffer: {!}", .{err});
         return err;
     };
 
-    index_buffer.setDataStaged(&index_data) catch |err| {
+    ib_interface = index_buffer.buffer();
+    errdefer ib_interface.deinit();
+
+    ib_interface.setData(index_data[0..]) catch |err| {
         root_log.err("Failed to load index buffer data: {!}", .{err});
         return err;
     };
@@ -277,8 +272,8 @@ pub fn testLoop() !void {
 
     graphics_pipeline.bind(&command_buffer);
 
-    vertex_buffer.bind(&command_buffer);
-    index_buffer.veryStupidBindingSpecificallyForIndexBuffersUntilIGetGenericBuffersWorking(&command_buffer);
+    vb_interface.bind(&command_buffer);
+    ib_interface.bind(&command_buffer);
 
     device.drawIndexed(&command_buffer, 6, 1, 0, 0, 0);
 
@@ -309,8 +304,8 @@ pub fn testDeinit() void {
     device.pr_dev.destroySemaphore(image_finished_semaphore, null);
     device.pr_dev.destroyFence(present_finished_fence, null);
 
-    index_buffer.deinit();
-    vertex_buffer.deinit();
+    ib_interface.deinit();
+    vb_interface.deinit();
     framebuffers.deinit();
     graphics_pipeline.deinit();
     renderpass.deinit();

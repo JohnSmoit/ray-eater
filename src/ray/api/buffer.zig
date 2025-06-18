@@ -12,93 +12,101 @@ const StructInfo = std.builtin.Type.Struct;
 
 const assert = std.debug.assert;
 
-const Layout = union(enum) {
-    Struct: StructInfo,
-    Int: TypeInfo.Int,
-};
-
-fn validateType(comptime T: type) Layout {
-    const info = @typeInfo(T);
-
-    return switch (info) {
-        .@"struct" => |s| if (s.layout == .@"extern") .{ .Struct = s } else @compileError(
-            "Binding descriptor types must have a known layout and field composition",
-        ),
-        .int => |i| .{ .Int = i },
-        else => @compileError("Fuck you! extern structs or primitives only!"),
-    };
-}
-
-// This is extremely jank when taking index buffers into account
-// FIX once we get to uniform buffers...
-fn getBindingDescription(T: type) vk.VertexInputBindingDescription {
-    _ = validateType(T);
-
-    const desc = vk.VertexInputBindingDescription{
-        .binding = 0,
-        .input_rate = .vertex,
-        .stride = @sizeOf(T),
-    };
-
-    return desc;
-}
-
-// TODO: Smarter deduction for formats
-fn getCorrespondingFormat(T: type) vk.Format {
-    return switch (T) {
-        meth.Vec3 => vk.Format.r32g32b32_sfloat,
-        meth.Vec2 => vk.Format.r32g32_sfloat,
-        u16 => vk.Format.r16_uint,
-        u32 => vk.Format.r32_uint,
-        else => @compileError("Unsupported input type"),
-    };
-}
-
-fn getVertexAttributeDescriptions(T: type) []const vk.VertexInputAttributeDescription {
-    const layout = validateType(T);
-    comptime var descriptions: []const vk.VertexInputAttributeDescription = &.{};
-
-    switch (layout) {
-        .Struct => |s| {
-            inline for (s.fields, 0..) |*field, index| {
-                descriptions = descriptions ++ [_]vk.VertexInputAttributeDescription{
-                    vk.VertexInputAttributeDescription{
-                        .binding = 0,
-                        .location = @intCast(index),
-                        .offset = @offsetOf(T, field.name),
-                        .format = getCorrespondingFormat(field.type),
-                    },
-                };
-            }
-            return descriptions;
-        },
-        .Int => return util.emptySlice(vk.VertexInputAttributeDescription),
-    }
-}
-
-pub fn VertexInputDescription(T: type) type {
-    return struct {
-        pub const vertex_desc: vk.VertexInputBindingDescription = getBindingDescription(T);
-        pub const attrib_desc: []const vk.VertexInputAttributeDescription = getVertexAttributeDescriptions(T);
-    };
-}
-
 pub const Config = struct {
     usage: vk.BufferUsageFlags = .{},
     memory: vk.MemoryPropertyFlags = .{},
 };
 
-pub const AnyBuffer = struct {
-    h_buf: vk.Buffer,
-    config: Config,
+const VTable = struct {
+    bind: *const (fn (*anyopaque, *const api.CommandBufferSet) void),
+
+    // this is kinda gross, maybe consider something other than type erasing here...
+    setData: *const (fn (*anyopaque, *const anyopaque) anyerror!void),
+    deinit: *const (fn (*anyopaque) void),
 };
 
+/// generic buffer interface, exposes common functionality
+/// for buffer operations such as binding, setting data, and
+/// lifecycle functions. These are directly meant to be
+/// called by users, unlike the lower-level generic buffer type
+pub const AnyBuffer = struct {
+    /// the type-erased inner buffer
+    /// The lifecycle of this pointer must exceed the lifespan
+    /// of the interface wrapper
+    ptr: *anyopaque,
+    handle: vk.Buffer,
+    size: usize,
+
+    /// Used mostly as a hint to detect potentially invalid
+    /// usage
+    cfg: *const Config,
+    vtable: *const VTable,
+
+    pub fn bind(self: AnyBuffer, cmd_buf: *const api.CommandBufferSet) void {
+        self.vtable.bind(self.ptr, cmd_buf);
+    }
+
+    pub fn setData(self: AnyBuffer, data: *const anyopaque) !void {
+        try self.vtable.setData(self.ptr, data);
+    }
+
+    pub fn deinit(self: AnyBuffer) void {
+        self.vtable.deinit(self.ptr);
+    }
+};
+
+pub fn copy(src: AnyBuffer, dst: AnyBuffer, dev: *const api.Device) !void {
+    assert(src.cfg.usage.contains(.{ .transfer_src_bit = true }));
+    assert(dst.cfg.usage.contains(.{ .transfer_dst_bit = true }));
+
+    const transfer_cmds = try api.CommandBufferSet.oneShot(dev);
+    defer transfer_cmds.deinit();
+
+    dev.pr_dev.cmdCopyBuffer(
+        transfer_cmds.h_cmd_buffer,
+        src.handle,
+        dst.handle,
+        1,
+        util.asManyPtr(vk.BufferCopy, &.{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = src.size,
+        }),
+    );
+
+    try transfer_cmds.end();
+
+    // queues are owned by the device, so it's OK to create wrappers willy nilly here
+    // since there's nothing that needs to be freed for them
+    const queue = try api.GraphicsQueue.init(dev);
+    try queue.submit(&transfer_cmds, null, null, null);
+    queue.waitIdle();
+    log.debug("Copying buffer {d} !", .{src.size});
+}
+
+pub fn StagingType(T: type) type {
+    return GenericBuffer(T, .{
+        .memory = .{
+            .host_visible_bit = true,
+            .host_coherent_bit = true,
+        },
+        .usage = .{
+            .transfer_src_bit = true,
+        },
+    });
+}
+
+/// provides basic buffer functionality and not much else
+/// Mean't to be composed into specializations of various buffer types
+/// this is a sort of "Helper" meant to lessen code duplication
+/// for operations that all buffers basically do the same with an opt-in
+/// (users choose which functions to use) approach
 pub fn GenericBuffer(T: type, comptime config: Config) type {
     return struct {
         const Self = @This();
 
         pub const element_size: usize = @sizeOf(T);
-        pub const Description = VertexInputDescription(T);
+        pub const cfg = config;
 
         h_buf: vk.Buffer = .null_handle,
         h_mem: ?vk.DeviceMemory = null,
@@ -124,7 +132,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             errdefer dev.pr_dev.destroyBuffer(buf.h_buf, null);
 
             buf.h_mem = try Self.allocateMemory(dev, buf.h_buf);
-            log.debug("Successfully allocated vertex buffer memory!", .{});
+            log.debug("Successfully allocated buffer memory!", .{});
 
             return buf;
         }
@@ -133,7 +141,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             return element_size * self.size;
         }
 
-        fn allocateMemory(dev: *const api.Device, h_buf: vk.Buffer) !vk.DeviceMemory {
+        pub fn allocateMemory(dev: *const api.Device, h_buf: vk.Buffer) !vk.DeviceMemory {
             const pr_dev = &dev.pr_dev;
 
             const mem_reqs = pr_dev.getBufferMemoryRequirements(h_buf);
@@ -166,48 +174,34 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             return h_mem;
         }
 
-        pub fn setData(self: *Self, elem: []const T) !void {
-            assert(config.memory.contains(.{ .host_visible_bit = true }));
-
-            const bytes_size = self.bytesSize();
-            const mem = try self.dev.pr_dev.mapMemory(
+        pub fn mapMemory(self: *Self) ![]T {
+            return @as([*]T, @alignCast(@ptrCast(try self.dev.pr_dev.mapMemory(
                 self.h_mem.?,
                 0,
-                bytes_size,
+                self.bytesSize(),
                 .{},
-            );
+            ))))[0..self.size];
+        }
 
-            @memcpy(
-                @as([*]u8, @ptrCast(mem))[0..bytes_size],
-                // Bad const cast, but as the source bytes, these should be unmodifiable no?
-                @as([*]u8, @constCast(@ptrCast(elem)))[0..bytes_size],
-            );
-
+        pub fn unmapMemory(self: *Self) void {
             self.dev.pr_dev.unmapMemory(self.h_mem.?);
         }
 
-        pub fn setDataStaged(self: *Self, elem: []const T) !void {
+        pub fn createStaging(self: *Self) !StagingType(T) {
+            const Staging = StagingType(T);
             assert(config.usage.contains(.{ .transfer_dst_bit = true }));
 
-            const StagingType = GenericBuffer(T, .{ .memory = .{
-                .host_visible_bit = true,
-                .host_coherent_bit = true,
-            }, .usage = .{
-                .transfer_src_bit = true,
-            } });
-
-            var staging_buf = try StagingType.create(self.dev, self.size);
-            defer staging_buf.deinit();
-
-            try staging_buf.setData(elem);
-
-            try staging_buf.copyTo(self.buffer());
+            const staging_buf = try Staging.create(self.dev, self.size);
+            return staging_buf;
         }
 
         pub fn buffer(self: *Self) AnyBuffer {
-            return AnyBuffer{
-                .h_buf = self.h_buf,
-                .config = config,
+            return AnyBuffer {
+                .cfg = &Self.cfg,
+                .handle = self.h_buf,
+                .ptr = self,
+                .vtable = undefined, // generic buffers do not support bind and set operations directly..
+                .size = self.bytesSize(),
             };
         }
 
@@ -245,21 +239,6 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             if (self.h_mem != null) {
                 self.dev.pr_dev.freeMemory(self.h_mem.?, null);
             }
-        }
-
-        pub fn bind(self: *const Self, cmd_buf: *const api.CommandBufferSet) void {
-            self.dev.pr_dev.cmdBindVertexBuffers(
-                cmd_buf.h_cmd_buffer,
-                0,
-                1,
-                util.asManyPtr(vk.Buffer, &self.h_buf),
-                &[_]vk.DeviceSize{0},
-            );
-        }
-    
-        /// I named it like this so that I don't forget to change it >:)
-        pub fn veryStupidBindingSpecificallyForIndexBuffersUntilIGetGenericBuffersWorking(self: *const Self, cmd_buf: *const api.CommandBufferSet) void {
-            self.dev.pr_dev.cmdBindIndexBuffer(cmd_buf.h_cmd_buffer, self.h_buf, 0,.uint16);
         }
     };
 }
