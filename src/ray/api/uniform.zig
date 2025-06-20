@@ -10,7 +10,8 @@ pub fn UniformBuffer(T: type) type {
     return struct {
         const Self = @This();
         const InnerBuffer = GenericBuffer(T, .{ .memory = .{
-            .device_local_bit = true,
+            .host_visible_bit = true,
+            .host_coherent_bit = true,
         }, .usage = .{
             .transfer_dst_bit = true,
             .uniform_buffer_bit = true,
@@ -20,7 +21,7 @@ pub fn UniformBuffer(T: type) type {
         mem: []T,
 
         pub fn create(dev: *const api.Device) !Self {
-            const buf = try InnerBuffer.create(dev, 1);
+            var buf = try InnerBuffer.create(dev, 1);
             errdefer buf.deinit(); // conditionally deinits allocated memory if it exists
 
             const mem = try buf.mapMemory();
@@ -29,7 +30,7 @@ pub fn UniformBuffer(T: type) type {
             return Self{ .mem = mem, .buf = buf };
         }
 
-        pub fn bind(ctx: *anyopaque, cmd_buf: *const api.CommandBufferSet) !void {
+        pub fn bind(ctx: *anyopaque, cmd_buf: *const api.CommandBufferSet) void {
             // No-Op
 
             _ =  ctx;

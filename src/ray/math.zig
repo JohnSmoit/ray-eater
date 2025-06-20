@@ -5,7 +5,7 @@ const math = std.math;
 //to make it more viable to have a more expansive set of
 //vector types
 pub const Vec3 = extern struct {
-    pub const global_up: Vec3 = vec(.{ 0.0, 1.0, 0.0 });
+    pub const global_up: Vec3 = vec(.{ 0.0, 0.0, 1.0 });
     pub const len: usize = 3;
 
     x: f32,

@@ -1101,7 +1101,7 @@ pub const FixedFunctionState = struct {
             // NOTE: Reversing some of these is probably a good idea if we wanted an inverted shape, like
             // for a cubemapped skybox!
             .cull_mode = .{ .back_bit = true },
-            .front_face = .clockwise,
+            .front_face = .counter_clockwise,
 
             // whether or not to bias fragment depth values
             // not really sure what this is used for except for a vague notion
@@ -1166,7 +1166,7 @@ pub const FixedFunctionState = struct {
 
         self.pipeline_layout_info = vk.PipelineLayoutCreateInfo{
             .set_layout_count = @intCast(config.descriptors.len),
-            .p_set_layouts = config.descriptors,
+            .p_set_layouts = config.descriptors.ptr,
             .push_constant_range_count = 0,
             .p_push_constant_ranges = null,
         };

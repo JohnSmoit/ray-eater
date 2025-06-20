@@ -44,12 +44,15 @@ pub const getFramebufferSize = c.glfwGetFramebufferSize;
 pub const pollEvents = c.glfwPollEvents;
 pub const setErrorCallback = c.glfwSetErrorCallback;
 
+pub const getTime = c.glfwGetTime;
+
 pub const createWindowSurface = c.glfwCreateWindowSurface;
 
 const glfwDestroyWindow = c.glfwDestroyWindow;
 const glfwWindowShouldClose = c.glfwWindowShouldClose;
 const glfwCreateWindow = c.glfwCreateWindow;
 const glfwWindowHint = c.glfwWindowHint;
+
 
 pub const Window = struct {
     handle: *GLFWwindow,

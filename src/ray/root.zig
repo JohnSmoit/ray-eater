@@ -267,7 +267,7 @@ pub fn testInit(allocator: Allocator) !void {
             30.0,
         ),
         .view = meth.Mat4.lookAt(
-            meth.vec(.{ 1.0, 1.0, 1.0 }),
+            meth.vec(.{ 2.0, 2.0, 2.0 }),
             meth.vec(.{ 0, 0, 0 }),
             meth.Vec3.global_up,
         ),
@@ -283,7 +283,24 @@ pub fn setRequiredExtensions(names: [][*:0]const u8) void {
 }
 
 fn updateUniforms() !void {
+    test_uniforms = .{
+        .model = meth.Mat4.identity().rotateZ(
+            meth.radians(45.0) * @as(f32, @floatCast(glfw.getTime())),
+        ),
+        .projection = meth.Mat4.perspective(
+            meth.radians(75.0),
+            600.0 / 900.0,
+            0.1,
+            30.0,
+        ),
+        .view = meth.Mat4.lookAt(
+            meth.vec(.{ 1.0, 1.0, 1.0 }),
+            meth.vec(.{ 0, 0, 0 }),
+            meth.Vec3.global_up,
+        ),
+    };
 
+    try test_descriptor.update(&test_uniforms);
 }
 
 pub fn testLoop() !void {
@@ -305,11 +322,14 @@ pub fn testLoop() !void {
 
     try command_buffer.begin();
     renderpass.begin(&command_buffer, &framebuffers, current_image);
+    
+    try updateUniforms();
 
     graphics_pipeline.bind(&command_buffer);
 
     vb_interface.bind(&command_buffer);
     ib_interface.bind(&command_buffer);
+    test_descriptor.bind(&command_buffer, graphics_pipeline.h_pipeline_layout);
 
     device.drawIndexed(&command_buffer, 6, 1, 0, 0, 0);
 
