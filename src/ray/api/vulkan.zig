@@ -1,4 +1,5 @@
 const vk = @import("vulkan");
+const descriptor = @import("descriptor.zig");
 const std = @import("std");
 const util = @import("../util.zig"); //TODO: avorelative id relative if possible
 const shader = @import("shader.zig");
@@ -996,6 +997,7 @@ pub const FixedFunctionState = struct {
         },
         vertex_binding: vk.VertexInputBindingDescription,
         vertex_attribs: []const vk.VertexInputAttributeDescription,
+        descriptors: []const vk.DescriptorSetLayout, 
         deez_nuts: bool = false,
     };
 
@@ -1163,8 +1165,8 @@ pub const FixedFunctionState = struct {
         };
 
         self.pipeline_layout_info = vk.PipelineLayoutCreateInfo{
-            .set_layout_count = 0,
-            .p_set_layouts = null,
+            .set_layout_count = @intCast(config.descriptors.len),
+            .p_set_layouts = config.descriptors,
             .push_constant_range_count = 0,
             .p_push_constant_ranges = null,
         };

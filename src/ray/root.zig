@@ -7,7 +7,8 @@ const util = @import("util.zig");
 
 const shader = @import("api/shader.zig");
 const buffer = @import("api/buffer.zig");
-const meth = @import("math.zig");
+pub const meth = @import("math.zig");
+const descriptor = @import("api/descriptor.zig");
 
 const vb = @import("api/vertex_buffer.zig");
 const ib = @import("api/index_buffer.zig");
@@ -66,14 +67,26 @@ const TestVertexInput = extern struct {
     color: meth.Vec3,
 };
 
+const TestUniforms = extern struct {
+    model: meth.Mat4,
+    view: meth.Mat4,
+    projection: meth.Mat4,
+};
+
+var test_uniforms: TestUniforms = undefined;
+
 const VertexBuffer = vb.VertexBuffer(TestVertexInput);
 const IndexBuffer = ib.IndexBuffer(u16);
+const Descriptor = descriptor.Descriptor(TestUniforms);
 
 var vertex_buffer: VertexBuffer = undefined;
 var index_buffer: IndexBuffer = undefined;
 
 var vb_interface: buffer.AnyBuffer = undefined;
 var ib_interface: buffer.AnyBuffer = undefined;
+
+const TestDescriptor = descriptor.GenericDescriptor(TestUniforms);
+var test_descriptor: TestDescriptor = undefined;
 
 fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
     glfw_log.err("error code {d} -- Message: {s}", .{ code, desc });
@@ -160,6 +173,8 @@ pub fn testInit(allocator: Allocator) !void {
         .viewport,
         .scissor,
     };
+    test_descriptor = try TestDescriptor.init(&device, .{ .stages = .{ .vertex_bit = true } });
+    errdefer test_descriptor.deinit();
 
     var fixed_function_state = api.FixedFunctionState{};
     fixed_function_state.init_self(&device, &.{
@@ -168,6 +183,7 @@ pub fn testInit(allocator: Allocator) !void {
         .deez_nuts = true,
         .vertex_binding = VertexBuffer.Description.vertex_desc,
         .vertex_attribs = VertexBuffer.Description.attrib_desc,
+        .descriptors = &[_]vk.DescriptorSetLayout{test_descriptor.h_desc_layout},
     });
     defer fixed_function_state.deinit();
 
@@ -240,6 +256,22 @@ pub fn testInit(allocator: Allocator) !void {
         root_log.err("Failed to load index buffer data: {!}", .{err});
         return err;
     };
+
+    // create some uniforms and stuff
+    test_uniforms = .{
+        .model = meth.Mat4.identity().rotateZ(meth.radians(45.0)),
+        .projection = meth.Mat4.perspective(
+            meth.radians(75.0),
+            600.0 / 900.0,
+            0.1,
+            30.0,
+        ),
+        .view = meth.Mat4.lookAt(
+            meth.vec(.{ 1.0, 1.0, 1.0 }),
+            meth.vec(.{ 0, 0, 0 }),
+            meth.Vec3.global_up,
+        ),
+    };
 }
 
 pub fn setWindow(window: *glfw.Window) void {
@@ -248,6 +280,10 @@ pub fn setWindow(window: *glfw.Window) void {
 
 pub fn setRequiredExtensions(names: [][*:0]const u8) void {
     external_extensions = names;
+}
+
+fn updateUniforms() !void {
+
 }
 
 pub fn testLoop() !void {
@@ -308,6 +344,7 @@ pub fn testDeinit() void {
     vb_interface.deinit();
     framebuffers.deinit();
     graphics_pipeline.deinit();
+    test_descriptor.deinit();
     renderpass.deinit();
     swapchain.deinit();
     graphics_queue.deinit();

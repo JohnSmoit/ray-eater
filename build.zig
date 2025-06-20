@@ -68,6 +68,18 @@ pub fn build(b: *std.Build) void {
         .root_module = app_mod,
     });
 
+    const test_mod = b.createModule(.{
+        .root_source_file = b.path("test/test_math.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_mod.addImport("ray", lib_mod);
+
+    const lib_tests = b.addTest(.{
+        .root_module = test_mod,
+        .link_libc = true,
+    });
+
     // temporary hard dep of GLFW to the library module, since I don't
     // want to deal with all the platorm specific runtime dyn linking shit (yet)
 
@@ -77,6 +89,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(app);
 
     const run_cmd = b.addRunArtifact(app);
+    const test_cmd = b.addRunArtifact(lib_tests);
 
     run_cmd.step.dependOn(b.getInstallStep());
 
@@ -85,5 +98,8 @@ pub fn build(b: *std.Build) void {
     }
 
     const run_step = b.step("run", "Run the app");
+    const test_step = b.step("test", "Run all unit tests at once");
+
     run_step.dependOn(&run_cmd.step);
+    test_step.dependOn(&test_cmd.step);
 }

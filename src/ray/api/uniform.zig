@@ -19,8 +19,8 @@ pub fn UniformBuffer(T: type) type {
         buf: InnerBuffer,
         mem: []T,
 
-        pub fn create(dev: *const api.Device, size: usize) !Self {
-            const buf = try InnerBuffer.create(dev, size);
+        pub fn create(dev: *const api.Device) !Self {
+            const buf = try InnerBuffer.create(dev, 1);
             errdefer buf.deinit(); // conditionally deinits allocated memory if it exists
 
             const mem = try buf.mapMemory();
