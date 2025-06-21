@@ -74,6 +74,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     test_mod.addImport("ray", lib_mod);
+    test_mod.addIncludePath(b.dependency("cglm", .{}).path("include"));
 
     const lib_tests = b.addTest(.{
         .root_module = test_mod,

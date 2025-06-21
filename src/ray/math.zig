@@ -15,6 +15,10 @@ pub const Vec3 = extern struct {
     pub fn vals(self: Vec3) struct { f32, f32, f32 } {
         return .{ self.x, self.y, self.z };
     }
+
+    pub fn negate(self: Vec3) Vec3 {
+        return vec(.{ -self.x, -self.y, -self.z });
+    }
 };
 
 pub const Vec2 = extern struct {
@@ -91,23 +95,38 @@ pub fn sub(a: Vec3, b: Vec3) Vec3 {
 pub fn radians(f: f32) f32 {
     return f * (math.pi / 180.0);
 }
-
+/// ## Brief
+/// A 4-by-4 matrix used extensively in transformation and rendering operations
+///
+/// ## Usage
+/// The actual elements of the matrix are laid out in column major order,
+/// that means that contiguous matrix elements represent elements of a single column in memory.
+/// This means that all member functions and direct manipulations of the matrix's data
+/// MUST operate on the matrix in column major ORDER OR ELSE BAD THINGS WILL HAPPEN
+/// I AM IN YOUR WALLS
 pub const Mat4 = extern struct {
+    // NOTE: Actually I think Imma just maintain the column major invariant
+    // myself in the implementation rather than make that the user's problem
     pub const rank: usize = 2;
     pub const rows: usize = 4;
     pub const cols: usize = 4;
 
     data: [cols][rows]f32 = undefined,
 
+    // NOTE: I automatically transpose the matrix to be row-major in the formatter
+    // cuz I think that's visually more intuitive for poeple, if this causes confusion,
+    // oops.
+    // ALL user-supplied data will be auto transposed so they can still do row-major ordering
     pub fn format(
         self: Mat4,
         comptime fmt: []const u8,
         options: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
+        const mat = self.transpose();
         try writer.writeAll("=====MATRIX4x4=====\n");
-        for (self.data) |row| {
-            try writer.print("[{d:2.3}, {d:2.3}, {d:2.3}, {d:2.3}]\n", .{row[0], row[1], row[2], row[3]});
+        for (mat.data) |col| {
+            try writer.print("[{d:2.3}, {d:2.3}, {d:2.3}, {d:2.3}]\n", .{ col[0], col[1], col[2], col[3] });
         }
 
         try writer.writeAll("=====ENDMATRIX4x4======\n");
@@ -119,8 +138,8 @@ pub const Mat4 = extern struct {
     pub fn create(vals: anytype) Mat4 {
         var mat = of(0.0);
 
-        inline for (vals, 0..) |row, x| {
-            inline for (row, 0..) |num, y| {
+        inline for (vals, 0..) |col, y| {
+            inline for (col, 0..) |num, x| {
                 const v = @as(f32, num);
                 mat.data[x][y] = v;
             }
@@ -166,6 +185,17 @@ pub const Mat4 = extern struct {
         return mul(mat, rotation);
     }
 
+    pub fn rotateX(mat: Mat4, rads: f32) Mat4 {
+        const rotation = create(.{
+            .{ 1.0, 0.0, 0.0, 0.0 },
+            .{ 0.0, @cos(rads), @sin(rads), 0.0 },
+            .{ 0.0, -@sin(rads), @cos(rads), 0.0 },
+            .{ 0.0, 0.0, 0.0, 1.0 },
+        });
+
+        return mul(mat, rotation);
+    }
+
     pub fn setRegion(
         mat: Mat4,
         /// Starting X -- inclusive
@@ -191,7 +221,7 @@ pub const Mat4 = extern struct {
 
         inline while (x < ex) : (x += 1) {
             inline while (y < ey) : (y += 1) {
-                res.data[x][y] = vals[x - sx][y - sy];
+                res.data[y][x] = vals[x - sx][y - sy];
             }
 
             y = sy;
@@ -209,56 +239,69 @@ pub const Mat4 = extern struct {
     }
 
     pub fn lookAt(eye: Vec3, center: Vec3, world_up: Vec3) Mat4 {
-        // compute coordinate frame
-        const forward = norm(sub(eye, center));
-        const up = norm(cross(forward, world_up));
-        const right = norm(cross(forward, up));
+        const z = norm(sub(eye, center)); // forward (camera looks down -Z)
+        const x = norm(cross(world_up, z)); // right
+        const y = cross(z, x); // up
 
-        return translate(of(0.0), vec(.{
-            dot(eye, right),
-            dot(eye, up),
-            dot(eye, forward),
-        })).setRegion(0, 3, 0, 3, .{
-            up.vals(),
-            forward.vals(),
-            right.vals(),
+        var view = identity();
+        // rotation part
+        view = view.setRegion(0, 3, 0, 3, .{
+            x.vals(),
+            y.vals(),
+            z.vals(),
         });
+
+        // translation part
+        const tx = -dot(x, eye);
+        const ty = -dot(y, eye);
+        const tz = -dot(z, eye);
+
+        view.data[3][0] = tx;
+        view.data[3][1] = ty;
+        view.data[3][2] = tz;
+
+        return view;
     }
 
     pub fn perspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
-        const angle: f32 = fov / 2.0;
-
-        const right: f32 = math.cos(angle);
-        const left: f32 = -right;
-        const top: f32 = right * aspect;
-        const bottom: f32 = -right * aspect;
-
-        const width: f32 = right - left;
-        const height: f32 = top - bottom;
+        const vp: f32 = 1.0 / @tan(fov / 2.0);
+        const as: f32 = vp / aspect;
 
         return create(.{
-            .{ (2.0 * near) / width, 0, (right + left) / (width), 0 },
-            .{ 0, (2.0 * near) / height, (top + bottom) / height, 0 },
-            .{ 0, 0, (-(far + near)) / (far - near), (-2 * far * near) / (far - near) },
+            .{ as, 0, 0, 0 },
+            .{ 0, vp, 0, 0 },
+            .{ 0, 0, far / (near - far), -(near * far) / (far - near) },
             .{ 0, 0, -1.0, 0 },
         });
     }
 
+    pub fn transpose(mat: Mat4) Mat4 {
+        var res = Mat4{};
+
+        for (0..cols) |x| {
+            for (0..rows) |y| {
+                res.data[y][x] = mat.data[x][y];
+            }
+        }
+
+        return res;
+    }
+
     pub fn mul(a: Mat4, b: Mat4) Mat4 {
         var res = of(0);
+
         for (0..cols) |x| {
             for (0..rows) |y| {
                 var sum: f32 = 0.0;
 
-
                 for (0..cols) |c| {
-                    const v1 = a.data[x][c];
-                    const v2 = b.data[c][y];
+                    const v1 = a.data[c][x];
+                    const v2 = b.data[y][c];
 
                     sum += v1 * v2;
                 }
 
-                res.data[x][y] = sum;
+                res.data[y][x] = sum;
             }
         }
 

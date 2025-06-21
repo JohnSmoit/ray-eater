@@ -106,7 +106,7 @@ pub fn testInit(allocator: Allocator) !void {
 
     try extensions.appendSlice(external_extensions orelse &[0][*:0]const u8{});
     try extensions.appendSlice(&[_][*:0]const u8{
-        vk.extensions.khr_portability_enumeration.name,
+        // vk.extensions.khr_portability_enumeration.name, // renderdoc no likee this one
         vk.extensions.khr_get_physical_device_properties_2.name,
         vk.extensions.ext_debug_utils.name,
     });
@@ -294,7 +294,7 @@ fn updateUniforms() !void {
             30.0,
         ),
         .view = meth.Mat4.lookAt(
-            meth.vec(.{ 1.0, 1.0, 1.0 }),
+            meth.vec(.{ 2.0, 2.0, 2.0 }),
             meth.vec(.{ 0, 0, 0 }),
             meth.Vec3.global_up,
         ),

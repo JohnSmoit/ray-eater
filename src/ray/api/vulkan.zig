@@ -1100,8 +1100,8 @@ pub const FixedFunctionState = struct {
             // which side of a polygon is front and back.
             // NOTE: Reversing some of these is probably a good idea if we wanted an inverted shape, like
             // for a cubemapped skybox!
-            .cull_mode = .{ .back_bit = true },
-            .front_face = .counter_clockwise,
+            .cull_mode = .{},
+            .front_face = .clockwise,
 
             // whether or not to bias fragment depth values
             // not really sure what this is used for except for a vague notion

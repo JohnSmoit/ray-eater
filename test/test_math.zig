@@ -49,7 +49,28 @@ test "matrix multiplication" {
         .{ 60.0, 91.0, 74.0, 95.0 },
     });
 
-    try assertEqual(.{ res, correct }, "multiplication");
+    try assertEqual(.{ correct, res }, "multiplication");
+}
+
+test "matrix ordering" {
+    // make sure the bloody matrices are column-major ordered
+    const mat1 = Mat4.create(.{
+        .{1.0, 2.0, 3.0, 4.0},
+        .{1.0, 2.0, 3.0, 4.0},
+        .{1.0, 2.0, 3.0, 4.0},
+        .{1.0, 2.0, 3.0, 4.0},
+    });
+
+    for (mat1.data, 0..) |col, v| {
+        for (col) |item| {
+            const fv: f32 = @floatFromInt(v + 1);
+            if (item != fv) {
+                test_log.err("Matrix ordering incorrect! {d} != {d}", .{item, fv});
+                test_log.err("Matrix: \n{s}", .{mat1});
+                return error.NotColumnMajorBro;
+            }
+        }
+    }
 }
 
 test "matrix translation" {
@@ -61,7 +82,7 @@ test "matrix translation" {
         .{ 0.0, 0.0, 0.0, 1.0 },
     });
 
-    try assertEqual(.{ mat1, res }, "translation");
+    try assertEqual(.{ res, mat1 }, "translation");
 }
 
 test "matrix rotation" {
@@ -70,11 +91,33 @@ test "matrix rotation" {
     const res = Mat4.create(.{
         .{ @cos(rot), -@sin(rot), 0.0, 0.0 },
         .{ @sin(rot), @cos(rot), 0.0, 0.0 },
-        .{0.0, 0.0, 1.0, 0.0},
-        .{0.0, 0.0, 0.0, 1.0},
+        .{ 0.0, 0.0, 1.0, 0.0 },
+        .{ 0.0, 0.0, 0.0, 1.0 },
     });
 
-    try assertEqual(.{mat1, res}, "Z rotation");
+    try assertEqual(.{ res, mat1 }, "Z rotation");
 }
 
-test 
+test "matrix projection" {
+    const mat1 = Mat4.perspective(meth.radians(75.0), 600.0 / 900.0, 0.1, 30.0);
+    const res = Mat4.create(.{
+        .{ 1.9548, 0.0000, 0.0000, 0.0000 },
+        .{ 0.0000, 1.3032, 0.0000, 0.0000 },
+        .{ 0.0000, 0.0000, -1.0033, -1.0000 },
+        .{ 0.0000, 0.0000, -0.1003, 0.0000 },
+    }).transpose();
+
+    try assertEqual(.{ res, mat1 }, "perspective projection");
+}
+
+test "matrix view" {
+    const mat1 = Mat4.lookAt(vec(.{ 2.0, 2.0, 2.0 }), vec(.{ 0, 0, 0 }), meth.Vec3.global_up);
+    const res = Mat4.create(.{
+        .{ 0.7071, -0.4082, -0.5774, 0.0000 },
+        .{ -0.7071, -0.4082, -0.5774, 0.0000 },
+        .{ 0.0000, 0.8165, -0.5774, 0.0000 },
+        .{ -0.0000, -0.0000, -3.4641, 1.0000 },
+    }).transpose();
+
+    try assertEqual(.{ res, mat1 }, "look at");
+}

@@ -52,6 +52,10 @@
             .url = "git+https://github.com/JohnSmoit/ray-eater-shaders.git#033e92609940adeb42bf7dacbf36efde0980ae0f",
             .hash = "RshLang-0.0.0-4EjkC6ApAAAuTe3jMjNny7s6Ki820i_Gqdeung0kw8NA",
         },
+        .cglm = .{
+            .url = "https://github.com/recp/cglm/archive/refs/tags/v0.9.6.zip",
+            .hash = "N-V-__8AAGApJACv6OGRSLZEdwbH9P68sV3B96LAZsZ21_4C",
+        },
     },
     .paths = .{
         "build.zig",
