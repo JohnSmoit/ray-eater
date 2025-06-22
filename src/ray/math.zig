@@ -5,12 +5,12 @@ const math = std.math;
 //to make it more viable to have a more expansive set of
 //vector types
 pub const Vec3 = extern struct {
-    pub const global_up: Vec3 = vec(.{ 0.0, 0.0, 1.0 });
+    pub const global_up: Vec3 = vec(.{ 0.0, -1.0, 0.0 });
     pub const len: usize = 3;
 
-    x: f32,
-    y: f32,
-    z: f32,
+    x: f32 = 0,
+    y: f32 = 0,
+    z: f32 = 0,
 
     pub fn vals(self: Vec3) struct { f32, f32, f32 } {
         return .{ self.x, self.y, self.z };
@@ -18,6 +18,30 @@ pub const Vec3 = extern struct {
 
     pub fn negate(self: Vec3) Vec3 {
         return vec(.{ -self.x, -self.y, -self.z });
+    }
+
+    pub fn at(self: *Vec3, index: usize) *f32 {
+        // wrapping behaviour because I can't be assed to make it optional or an error
+        const ind = @mod(index, len);
+        return switch (ind) {
+            0 => &self.x,
+            1 => &self.y,
+            2 => &self.z,
+            else => unreachable,
+        };
+    }
+
+    pub fn mul(self: Vec3, mat: Mat4) Vec3 {
+        var res = Vec3{};
+        const src = self.vals();
+
+        for (0..(mat.data.len - 1)) |col| {
+            for (col) |val| {
+                res.at(col).* += src[col] * val;
+            }
+        }
+
+        return res;
     }
 };
 
@@ -95,6 +119,8 @@ pub fn sub(a: Vec3, b: Vec3) Vec3 {
 pub fn radians(f: f32) f32 {
     return f * (math.pi / 180.0);
 }
+
+//NOTE: Temporary usage of ZLM cuz I can't seem to get my linear algebra correct
 /// ## Brief
 /// A 4-by-4 matrix used extensively in transformation and rendering operations
 ///
@@ -148,6 +174,10 @@ pub const Mat4 = extern struct {
         return mat;
     }
 
+    pub fn createCM(vals: anytype) Mat4 {
+        return create(vals).transpose();
+    }
+
     pub fn identity() Mat4 {
         return create(.{
             .{ 1.0, 0.0, 0.0, 0.0 },
@@ -196,6 +226,15 @@ pub const Mat4 = extern struct {
         return mul(mat, rotation);
     }
 
+    pub fn rotateY(mat: Mat4, rads: f32) Mat4 {
+        return mat.mul(create(.{
+            .{@cos(rads), 0, @sin(rads), 0},
+            .{0, 1, 0, 0},
+            .{-@sin(rads), 0, @cos(rads), 0},
+            .{0, 0, 0, 1},
+        }));
+    }
+
     pub fn setRegion(
         mat: Mat4,
         /// Starting X -- inclusive
@@ -239,16 +278,16 @@ pub const Mat4 = extern struct {
     }
 
     pub fn lookAt(eye: Vec3, center: Vec3, world_up: Vec3) Mat4 {
-        const z = norm(sub(eye, center)); // forward (camera looks down -Z)
-        const x = norm(cross(world_up, z)); // right
-        const y = cross(z, x); // up
+        const z = norm(sub(center, eye)); // forward (camera looks down -Z)
+        const x = norm(cross(z, world_up)); // right
+        const y = norm(cross(x, z)); // up
 
         var view = identity();
         // rotation part
         view = view.setRegion(0, 3, 0, 3, .{
             x.vals(),
             y.vals(),
-            z.vals(),
+            z.negate().vals(),
         });
 
         // translation part
@@ -256,11 +295,14 @@ pub const Mat4 = extern struct {
         const ty = -dot(y, eye);
         const tz = -dot(z, eye);
 
-        view.data[3][0] = tx;
-        view.data[3][1] = ty;
-        view.data[3][2] = tz;
+        const adjustment = create(.{
+            .{ 1.0, 0.0, 0.0, 0.0 },
+            .{ 0.0, 1.0, 0.0, 0.0 },
+            .{ 0.0, 0.0, -1.0, 0.0 },
+            .{ 0.0, 0.0, 0.0, 1.0 },
+        });
 
-        return view;
+        return view.translate(vec(.{tx, ty, tz})).mul(adjustment);
     }
 
     pub fn perspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
@@ -269,9 +311,9 @@ pub const Mat4 = extern struct {
 
         return create(.{
             .{ as, 0, 0, 0 },
-            .{ 0, vp, 0, 0 },
-            .{ 0, 0, far / (near - far), -(near * far) / (far - near) },
-            .{ 0, 0, -1.0, 0 },
+            .{ 0, -vp, 0, 0 },
+            .{ 0, 0, far / (far - near), -(near * far) / (far - near) },
+            .{ 0, 0, 1.0, 0 },
         });
     }
 
@@ -290,18 +332,18 @@ pub const Mat4 = extern struct {
     pub fn mul(a: Mat4, b: Mat4) Mat4 {
         var res = of(0);
 
-        for (0..cols) |x| {
-            for (0..rows) |y| {
+        for (0..cols) |col| {
+            for (0..rows) |row| {
                 var sum: f32 = 0.0;
 
-                for (0..cols) |c| {
-                    const v1 = a.data[c][x];
-                    const v2 = b.data[y][c];
+                for (0..cols) |i| {
+                    const v1 = a.data[i][row];
+                    const v2 = b.data[col][i];
 
                     sum += v1 * v2;
                 }
 
-                res.data[y][x] = sum;
+                res.data[col][row] = sum;
             }
         }
 

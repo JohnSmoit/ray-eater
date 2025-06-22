@@ -25,6 +25,10 @@ fn assertEqual(matrices: anytype, op: []const u8) !void {
     }
 }
 
+const glm = @cImport({
+    @cInclude("cglm/struct.h");
+});
+
 test "matrix multiplication" {
     const mat1 = Mat4.create(.{
         .{ 1.0, 2.0, 3.0, 4.0 },
@@ -88,12 +92,10 @@ test "matrix translation" {
 test "matrix rotation" {
     const rot = meth.radians(45.0);
     const mat1 = Mat4.identity().rotateZ(rot);
-    const res = Mat4.create(.{
-        .{ @cos(rot), -@sin(rot), 0.0, 0.0 },
-        .{ @sin(rot), @cos(rot), 0.0, 0.0 },
-        .{ 0.0, 0.0, 1.0, 0.0 },
-        .{ 0.0, 0.0, 0.0, 1.0 },
-    });
+    var res = Mat4.identity();
+
+    const mat = glm.glms_rotate_z(glm.glms_mat4_identity(), rot);
+    res.data = mat.raw;
 
     try assertEqual(.{ res, mat1 }, "Z rotation");
 }

@@ -257,9 +257,8 @@ pub fn testInit(allocator: Allocator) !void {
         return err;
     };
 
-    // create some uniforms and stuff
     test_uniforms = .{
-        .model = meth.Mat4.identity().rotateZ(meth.radians(45.0)),
+        .model = meth.Mat4.identity().rotateX(meth.radians(45.0)),
         .projection = meth.Mat4.perspective(
             meth.radians(75.0),
             600.0 / 900.0,
@@ -272,6 +271,17 @@ pub fn testInit(allocator: Allocator) !void {
             meth.Vec3.global_up,
         ),
     };
+
+    // test_uniforms = .{
+    //     .model = meth.Mat4.rotateZ(, meth.radians(45.0)),
+    //     .projection = meth.zlm.Mat4.createPerspective(
+    //         meth.radians(45.0),
+    //         600.0 / 900.0,
+    //         0.1,
+    //         30.0,
+    //     ),
+    //     .view = meth.zlm.Mat4.createLookAt(meth.zlm.vec3(2.0, 2.0, 2.0), meth.zlm.vec3(0, 0, 0), meth.zlm.Vec3.unitY),
+    // };
 }
 
 pub fn setWindow(window: *glfw.Window) void {
@@ -284,12 +294,12 @@ pub fn setRequiredExtensions(names: [][*:0]const u8) void {
 
 fn updateUniforms() !void {
     test_uniforms = .{
-        .model = meth.Mat4.identity().rotateZ(
+        .model = meth.Mat4.identity().rotateY(
             meth.radians(45.0) * @as(f32, @floatCast(glfw.getTime())),
         ),
         .projection = meth.Mat4.perspective(
-            meth.radians(75.0),
-            600.0 / 900.0,
+            meth.radians(45.0),
+            900.0 / 600.0,
             0.1,
             30.0,
         ),
@@ -300,6 +310,16 @@ fn updateUniforms() !void {
         ),
     };
 
+    // test_uniforms = .{
+    //     .model = meth.zlm.Mat4.createAngleAxis(meth.zlm.Vec3.unitY, meth.radians(45.0) * @as(f32, @floatCast(glfw.getTime()))),
+    //     .projection = meth.zlm.Mat4.createPerspective(
+    //         meth.radians(45.0),
+    //         600.0 / 900.0,
+    //         0.1,
+    //         30.0,
+    //     ),
+    //     .view = meth.zlm.Mat4.createLookAt(meth.zlm.vec3(2.0, 2.0, 2.0), meth.zlm.vec3(0, 0, 0), meth.zlm.Vec3.unitY),
+    // };
     try test_descriptor.update(&test_uniforms);
 }
 
@@ -322,7 +342,7 @@ pub fn testLoop() !void {
 
     try command_buffer.begin();
     renderpass.begin(&command_buffer, &framebuffers, current_image);
-    
+
     try updateUniforms();
 
     graphics_pipeline.bind(&command_buffer);

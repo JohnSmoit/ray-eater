@@ -74,12 +74,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     test_mod.addImport("ray", lib_mod);
-    test_mod.addIncludePath(b.dependency("cglm", .{}).path("include"));
+
 
     const lib_tests = b.addTest(.{
         .root_module = test_mod,
         .link_libc = true,
     });
+    lib_tests.linkLibC();
 
     // temporary hard dep of GLFW to the library module, since I don't
     // want to deal with all the platorm specific runtime dyn linking shit (yet)
