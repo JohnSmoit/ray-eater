@@ -13,6 +13,7 @@ pub fn UniformBuffer(T: type) type {
             .host_visible_bit = true,
             .host_coherent_bit = true,
         }, .usage = .{
+            // FIXME: No need this vvv 
             .transfer_dst_bit = true,
             .uniform_buffer_bit = true,
         } });

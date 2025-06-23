@@ -311,6 +311,35 @@ pub const Device = struct {
     // HAve the device context manage the command pool
     // and then all command buffers can be created using the same pool
     h_cmd_pool: vk.CommandPool = .null_handle,
+    props: vk.PhysicalDeviceProperties,
+
+    pub fn findMemoryTypeIndex(
+        self: *const Device,
+        mem_reqs: vk.MemoryRequirements,
+        req_flags: ?vk.MemoryPropertyFlags,
+    ) !u32 {
+        const dev_mem_props = self.getMemProperties();
+
+        const requested_flags: vk.MemoryPropertyFlags = req_flags orelse .{};
+
+        var found = false;
+        var chosen_mem: u32 = 0;
+
+        for (0..dev_mem_props.memory_type_count) |i| {
+            const mem_flags = dev_mem_props.memory_types[i].property_flags;
+            if (mem_reqs.memory_type_bits & (@as(u32, 1) << @intCast(i)) != 0 and mem_flags.contains(requested_flags)) {
+                found = true;
+
+                chosen_mem = @intCast(i);
+                break;
+            }
+        }
+
+        if (found)
+            return chosen_mem;
+
+        return error.IncompatibleMemoryTypes;
+    }
 
     fn getQueueFamilies(
         dev: vk.PhysicalDevice,
@@ -446,6 +475,8 @@ pub const Device = struct {
             return error.NoSuitableDevice;
         };
 
+        const dev_properties = parent.pr_inst.getPhysicalDeviceProperties(chosen_dev);
+
         const dev_queue_indices = getQueueFamilies(
             chosen_dev,
             &parent.pr_inst,
@@ -522,6 +553,7 @@ pub const Device = struct {
             .h_cmd_pool = cmd_pool,
             .families = dev_queue_indices,
             .swapchain_details = swapchain_details,
+            .props = dev_properties,
         };
     }
 
@@ -997,7 +1029,7 @@ pub const FixedFunctionState = struct {
         },
         vertex_binding: vk.VertexInputBindingDescription,
         vertex_attribs: []const vk.VertexInputAttributeDescription,
-        descriptors: []const vk.DescriptorSetLayout, 
+        descriptors: []const vk.DescriptorSetLayout,
         deez_nuts: bool = false,
     };
 
@@ -1454,7 +1486,8 @@ pub const CommandBufferSet = struct {
     h_cmd_buffer: vk.CommandBuffer,
     h_cmd_pool: vk.CommandPool,
 
-    pr_dev: *const vk.DeviceProxy,
+    dev: *const Device,
+    one_shot: bool = false,
 
     pub fn init(dev: *const Device) !CommandBufferSet {
         var cmd_buffer: vk.CommandBuffer = undefined;
@@ -1473,12 +1506,13 @@ pub const CommandBufferSet = struct {
         return .{
             .h_cmd_buffer = cmd_buffer,
             .h_cmd_pool = dev.h_cmd_pool,
-            .pr_dev = &dev.pr_dev,
+            .dev = dev,
         };
     }
 
     pub fn oneShot(dev: *const Device) !CommandBufferSet {
-        const buf = try init(dev);
+        var buf = try init(dev);
+        buf.one_shot = true;
 
         try buf.beginConfig(.{ .one_time_submit_bit = true });
         return buf;
@@ -1489,7 +1523,7 @@ pub const CommandBufferSet = struct {
     }
 
     pub fn beginConfig(self: *const CommandBufferSet, flags: vk.CommandBufferUsageFlags) !void {
-        self.pr_dev.beginCommandBuffer(self.h_cmd_buffer, &.{
+        self.dev.pr_dev.beginCommandBuffer(self.h_cmd_buffer, &.{
             .flags = flags,
             .p_inheritance_info = null,
         }) catch |err| {
@@ -1499,21 +1533,32 @@ pub const CommandBufferSet = struct {
     }
 
     pub fn end(self: *const CommandBufferSet) !void {
-        self.pr_dev.endCommandBuffer(self.h_cmd_buffer) catch |err| {
+        self.dev.pr_dev.endCommandBuffer(self.h_cmd_buffer) catch |err| {
             log.err("Command recording failed: {!}", .{err});
             return err;
         };
+
+        // NOTE: For now, I'm going to just hardcode a submit to the graphics queue
+        // if a one shot command buffer is used
+        // Also, synchronization is not gonna be handled yet...
+        // the best way to handle synchronization is to only do 1 thing at a time 😊
+        // (by waiting idle)
+        if (self.one_shot) {
+            const submit_queue = try GraphicsQueue.init(self.dev);
+            try submit_queue.submit(self, null,null, null);
+            submit_queue.waitIdle();
+        }
     }
 
     pub fn reset(self: *const CommandBufferSet) !void {
-        self.pr_dev.resetCommandBuffer(self.h_cmd_buffer, .{}) catch |err| {
+        self.dev.pr_dev.resetCommandBuffer(self.h_cmd_buffer, .{}) catch |err| {
             log.err("Error resetting command buffer: {!}", .{err});
             return err;
         };
     }
 
     pub fn deinit(self: *const CommandBufferSet) void {
-        self.pr_dev.freeCommandBuffers(
+        self.dev.pr_dev.freeCommandBuffers(
             self.h_cmd_pool,
             1,
             util.asManyPtr(vk.CommandBuffer, &self.h_cmd_buffer),

@@ -10,6 +10,8 @@ const buffer = @import("api/buffer.zig");
 pub const meth = @import("math.zig");
 const descriptor = @import("api/descriptor.zig");
 
+const TexImage = @import("api/texture.zig");
+
 const vb = @import("api/vertex_buffer.zig");
 const ib = @import("api/index_buffer.zig");
 const ub = @import("api/uniform.zig");
@@ -73,20 +75,32 @@ const TestUniforms = extern struct {
     projection: meth.Mat4,
 };
 
+const UniformBuffer = ub.UniformBuffer(TestUniforms);
+
 var test_uniforms: TestUniforms = undefined;
 
 const VertexBuffer = vb.VertexBuffer(TestVertexInput);
 const IndexBuffer = ib.IndexBuffer(u16);
-const Descriptor = descriptor.Descriptor(TestUniforms);
 
 var vertex_buffer: VertexBuffer = undefined;
 var index_buffer: IndexBuffer = undefined;
+var uniform_buffer: UniformBuffer = undefined;
 
 var vb_interface: buffer.AnyBuffer = undefined;
 var ib_interface: buffer.AnyBuffer = undefined;
 
-const TestDescriptor = descriptor.GenericDescriptor(TestUniforms);
+const TestDescriptor = descriptor.GenericDescriptor(
+    &[_]descriptor.LayoutBindings{ .{
+        .stages = .{ .vertex_bit = true },
+        .type = .Uniform,
+    }, .{
+        .stages = .{ .vertex_bit = true },
+        .type = .Sampler,
+    } },
+);
 var test_descriptor: TestDescriptor = undefined;
+
+var test_tex: TexImage = undefined;
 
 fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
     glfw_log.err("error code {d} -- Message: {s}", .{ code, desc });
@@ -173,7 +187,13 @@ pub fn testInit(allocator: Allocator) !void {
         .viewport,
         .scissor,
     };
-    test_descriptor = try TestDescriptor.init(&device, .{ .stages = .{ .vertex_bit = true } });
+    test_descriptor = try TestDescriptor.init(&device, .{
+        .bindings = &[_]descriptor.ResolvedBinding{
+            .{
+                .
+            }
+        }
+    });
     errdefer test_descriptor.deinit();
 
     var fixed_function_state = api.FixedFunctionState{};
@@ -282,6 +302,10 @@ pub fn testInit(allocator: Allocator) !void {
     //     ),
     //     .view = meth.zlm.Mat4.createLookAt(meth.zlm.vec3(2.0, 2.0, 2.0), meth.zlm.vec3(0, 0, 0), meth.zlm.Vec3.unitY),
     // };
+    //
+
+    // create test textures and stuff I guess
+    test_tex = try TexImage.fromFile(&device, "textures/shrek.png", allocator);
 }
 
 pub fn setWindow(window: *glfw.Window) void {
@@ -379,6 +403,8 @@ pub fn testDeinit() void {
     device.pr_dev.destroySemaphore(render_finished_semaphore, null);
     device.pr_dev.destroySemaphore(image_finished_semaphore, null);
     device.pr_dev.destroyFence(present_finished_fence, null);
+
+    test_tex.deinit();
 
     ib_interface.deinit();
     vb_interface.deinit();

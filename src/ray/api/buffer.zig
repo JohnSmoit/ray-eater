@@ -18,11 +18,11 @@ pub const Config = struct {
 };
 
 const VTable = struct {
-    bind: *const (fn (*anyopaque, *const api.CommandBufferSet) void),
+    bind: *const (fn (*anyopaque, *const api.CommandBufferSet) void) = undefined,
 
     // this is kinda gross, maybe consider something other than type erasing here...
-    setData: *const (fn (*anyopaque, *const anyopaque) anyerror!void),
-    deinit: *const (fn (*anyopaque) void),
+    setData: *const (fn (*anyopaque, *const anyopaque) anyerror!void) = undefined,
+    deinit: *const (fn (*anyopaque) void) = undefined,
 };
 
 /// generic buffer interface, exposes common functionality
@@ -75,13 +75,6 @@ pub fn copy(src: AnyBuffer, dst: AnyBuffer, dev: *const api.Device) !void {
     );
 
     try transfer_cmds.end();
-
-    // queues are owned by the device, so it's OK to create wrappers willy nilly here
-    // since there's nothing that needs to be freed for them
-    const queue = try api.GraphicsQueue.init(dev);
-    try queue.submit(&transfer_cmds, null, null, null);
-    queue.waitIdle();
-    log.debug("Copying buffer {d} !", .{src.size});
 }
 
 pub fn StagingType(T: type) type {
@@ -95,6 +88,7 @@ pub fn StagingType(T: type) type {
         },
     });
 }
+
 
 /// provides basic buffer functionality and not much else
 /// Mean't to be composed into specializations of various buffer types
@@ -145,23 +139,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             const pr_dev = &dev.pr_dev;
 
             const mem_reqs = pr_dev.getBufferMemoryRequirements(h_buf);
-            const dev_mem_props = dev.getMemProperties();
-
-            const requested_flags = config.memory;
-
-            var found = false;
-            var chosen_mem: u32 = 0;
-
-            for (0..dev_mem_props.memory_type_count) |i| {
-                const mem_flags = dev_mem_props.memory_types[i].property_flags;
-                if (mem_reqs.memory_type_bits & (@as(u32, 1) << @intCast(i)) != 0 and mem_flags.contains(requested_flags)) {
-                    found = true;
-                    chosen_mem = @intCast(i);
-                    break;
-                }
-            }
-
-            if (!found) return error.IncompatibleMemory;
+            const chosen_mem = try dev.findMemoryTypeIndex(mem_reqs, config.memory);
 
             const h_mem = try pr_dev.allocateMemory(&.{
                 .allocation_size = mem_reqs.size,
@@ -200,9 +178,22 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
                 .cfg = &Self.cfg,
                 .handle = self.h_buf,
                 .ptr = self,
-                .vtable = undefined, // generic buffers do not support bind and set operations directly..
+                .vtable = &.{
+                    .setData = Self.setData,
+                }, 
                 .size = self.bytesSize(),
             };
+        }
+
+
+        pub fn setData(ctx: *anyopaque, data: *const anyopaque) !void {
+            const self: *Self = @ptrCast(@alignCast(ctx));
+            const elem: []const T = @as([*]const T, @ptrCast(@alignCast(data)))[0..self.size];
+
+            const mem = try self.mapMemory();
+
+            @memcpy(mem, elem);
+            self.unmapMemory();
         }
 
         pub fn copyTo(self: *Self, dest: AnyBuffer) !void {
@@ -225,12 +216,6 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             );
 
             try transfer_cmds.end();
-
-            // queues are owned by the device, so it's OK to create wrappers willy nilly here
-            // since there's nothing that needs to be freed for them
-            const queue = try api.GraphicsQueue.init(self.dev);
-            try queue.submit(&transfer_cmds, null, null, null);
-            queue.waitIdle();
         }
 
         pub fn deinit(self: *const Self) void {
