@@ -49,12 +49,11 @@ pub const ResolvedBinding = union(DescriptorType) {
         res: AnyBuffer,
         info: vk.DescriptorBufferInfo = undefined,
     },
-    Texture: struct {
+    Sampler: struct {
         res: *const TexImage,
         info: vk.DescriptorImageInfo = undefined,
-    }
+    },
 };
-
 
 /// ## Notes
 /// The order you specify the bindings to the function
@@ -66,7 +65,7 @@ pub fn GenericDescriptor(comptime bind_info: []const LayoutBindings) type {
 
         pub const Config = struct {
             // this gets copied to the actual array, so it can be specified locally no problemo
-            bindings: []const ResolvedBinding,
+            bindings: []ResolvedBinding,
         };
 
         h_desc_layout: vk.DescriptorSetLayout,
@@ -86,47 +85,60 @@ pub fn GenericDescriptor(comptime bind_info: []const LayoutBindings) type {
                     .descriptor_count = 1,
                     .stage_flags = bind_info[index].stages,
 
-                    .descriptor_type = bind_info[index].type,
+                    .descriptor_type = switch (bind_info[index].type) {
+                        .Sampler => .combined_image_sampler,
+                        .Uniform => .uniform_buffer,
+                    },
                 };
             }
         }
 
         fn updateDescriptorSets(
+            self: *Self,
             dev: *const Device,
-            bindings: []const ResolvedBinding,
+            bindings: []ResolvedBinding,
             desc_set: vk.DescriptorSet,
         ) void {
-            const writes: [num_bindings]vk.WriteDescriptorSet = undefined;
+            var writes: [num_bindings]vk.WriteDescriptorSet = undefined;
 
             for (bindings, 0..num_bindings) |binding, index| {
                 writes[index] = vk.WriteDescriptorSet{
+                    .descriptor_type = undefined,
+
                     .dst_binding = @intCast(index),
                     .dst_array_element = 0,
                     .descriptor_count = 1,
                     .dst_set = desc_set,
+
+                    .p_buffer_info = undefined,
+                    .p_image_info = undefined,
+                    .p_texel_buffer_view = undefined,
                 };
+
+                self.resolved_bindings[index] = binding;
 
                 //FIX: GUHH fuck vulkan's struct pointers
                 switch (binding) {
-                    .Texture => |*tex| {
-                        tex.info = vk.DescriptorImageInfo{
+                    .Sampler => |*tex| {
+                        log.debug("Guh: {x}", .{tex.res.view.h_view});
+                        bindings[index].Sampler.info = vk.DescriptorImageInfo{
                             .image_layout = .read_only_optimal,
                             .image_view = tex.res.view.h_view,
                             .sampler = tex.res.h_sampler,
                         };
 
                         writes[index].descriptor_type = .combined_image_sampler;
-                        writes[index].p_image_info = many(vk.DescriptorImageInfo, &tex.info);
+                        writes[index].p_image_info = many(vk.DescriptorImageInfo, &bindings[index].Sampler.info);
                     },
                     .Uniform => |*buf| {
-                        buf.info = vk.DescriptorBufferInfo{
-                            .buffer = buf.res.handle,
+                        bindings[index].Uniform.info = vk.DescriptorBufferInfo{
+                            .buffer = if (buf.res.handle == .null_handle) @panic("FUCK") else buf.res.handle,
                             .offset = 0,
                             .range = buf.res.size,
                         };
 
                         writes[index].descriptor_type = .uniform_buffer;
-                        writes[index].p_buffer_info = many(vk.DescriptorBufferInfo, &buf.info);
+                        writes[index].p_buffer_info = many(vk.DescriptorBufferInfo, &bindings[index].Uniform.info);
                     }
                 }
             }
@@ -138,9 +150,8 @@ pub fn GenericDescriptor(comptime bind_info: []const LayoutBindings) type {
                 null,
             );
         }
-        
-        pub fn init(dev: *const Device, config: Config) !Self {
 
+        pub fn init(dev: *const Device, config: Config) !Self {
             if (config.bindings.len < num_bindings) {
                 return error.InvalidBindings;
             }
@@ -149,7 +160,7 @@ pub fn GenericDescriptor(comptime bind_info: []const LayoutBindings) type {
 
             const layout_info = vk.DescriptorSetLayoutCreateInfo{
                 .binding_count = bindings.len,
-                .p_bindings = many(vk.DescriptorSetLayoutBinding, &bindings),
+                .p_bindings = bindings[0..],
             };
 
             const desc_layout = try dev.pr_dev.createDescriptorSetLayout(
@@ -169,14 +180,16 @@ pub fn GenericDescriptor(comptime bind_info: []const LayoutBindings) type {
             }, desc_set[0..]);
 
             // setup the bloody descriptor sets and associate them wit the buffer
-            updateDescriptorSets(dev, config.bindings, desc_set[0]);
-
-            return Self{
+            var descriptor = Self{
                 .h_desc_layout = desc_layout,
                 .h_desc_pool = desc_pool,
                 .pr_dev = &dev.pr_dev,
                 .h_desc_set = desc_set[0],
             };
+
+            descriptor.updateDescriptorSets(dev, config.bindings, desc_set[0]);
+
+            return descriptor;
         }
 
         pub fn bind(self: *const Self, cmd_buf: *const CommandBufferSet, layout: vk.PipelineLayout) void {
@@ -195,18 +208,15 @@ pub fn GenericDescriptor(comptime bind_info: []const LayoutBindings) type {
         pub fn deinit(self: *Self) void {
             self.pr_dev.destroyDescriptorPool(self.h_desc_pool, null);
             self.pr_dev.destroyDescriptorSetLayout(self.h_desc_layout, null);
-
-            // NOTE: Totally botched the vtable interface implementation LOL (pls redo post bootstrap)
-            self.ubo.buffer().deinit();
         }
 
         pub fn update(self: *Self, index: usize, data: anytype) !void {
             const binding = self.resolved_bindings[index];
             switch (binding) {
                 .Uniform => |buf| {
-                    try buf.setData(data);
+                    try buf.res.setData(data);
                 },
-                .Texture => {
+                .Sampler => {
                     log.err("Fuck (AKA no texture updating pretty please", .{});
                     return error.Unsupported;
                 }

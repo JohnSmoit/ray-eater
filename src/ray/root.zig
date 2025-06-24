@@ -67,6 +67,7 @@ var present_finished_fence: vk.Fence = .null_handle;
 const TestVertexInput = extern struct {
     position: meth.Vec2,
     color: meth.Vec3,
+    uv: meth.Vec2,
 };
 
 const TestUniforms = extern struct {
@@ -94,7 +95,7 @@ const TestDescriptor = descriptor.GenericDescriptor(
         .stages = .{ .vertex_bit = true },
         .type = .Uniform,
     }, .{
-        .stages = .{ .vertex_bit = true },
+        .stages = .{ .fragment_bit = true },
         .type = .Sampler,
     } },
 );
@@ -174,6 +175,7 @@ pub fn testInit(allocator: Allocator) !void {
         "shaders/shader.vert",
         &device,
     );
+
     defer vert_shader_module.deinit();
     const frag_shader_module = try shader.Module.from_source_file(
         .Fragment,
@@ -187,12 +189,24 @@ pub fn testInit(allocator: Allocator) !void {
         .viewport,
         .scissor,
     };
+
+    test_tex = try TexImage.fromFile(&device, "textures/shrek.png", allocator);
+    errdefer test_tex.deinit();
+
+    uniform_buffer = try UniformBuffer.create(&device);
+    errdefer uniform_buffer.buffer().deinit();
+
+    var bindings = [_]descriptor.ResolvedBinding{
+        descriptor.ResolvedBinding{ .Uniform = .{
+            .res = uniform_buffer.buffer(),
+        } },
+        descriptor.ResolvedBinding{ .Sampler = .{
+            .res = &test_tex,
+        } },
+    };
+
     test_descriptor = try TestDescriptor.init(&device, .{
-        .bindings = &[_]descriptor.ResolvedBinding{
-            .{
-                .
-            }
-        }
+        .bindings = &bindings,
     });
     errdefer test_descriptor.deinit();
 
@@ -241,17 +255,34 @@ pub fn testInit(allocator: Allocator) !void {
 
     // test vertex data and stuff
     const vertex_data = [_]TestVertexInput{
-        .{ .position = meth.vec(.{ -0.5, -0.5 }), .color = meth.vec(.{ 1.0, 0.0, 0.0 }) },
-        .{ .position = meth.vec(.{ 0.5, -0.5 }), .color = meth.vec(.{ 0.0, 1.0, 0.0 }) },
-        .{ .position = meth.vec(.{ 0.5, 0.5 }), .color = meth.vec(.{ 0.0, 0.0, 1.0 }) },
-        .{ .position = meth.vec(.{ -0.5, 0.5 }), .color = meth.vec(.{ 1.0, 1.0, 1.0 }) },
+        .{
+            .position = meth.vec(.{ -0.5, -0.5 }),
+            .color = meth.vec(.{ 1.0, 0.0, 0.0 }),
+            .uv = meth.vec(.{ 1.0, 0.0 }),
+        },
+        .{
+            .position = meth.vec(.{ 0.5, -0.5 }),
+            .color = meth.vec(.{ 0.0, 1.0, 0.0 }),
+            .uv = meth.vec(.{ 0.0, 0.0 }),
+        },
+        .{
+            .position = meth.vec(.{ 0.5, 0.5 }),
+            .color = meth.vec(.{ 0.0, 0.0, 1.0 }),
+            .uv = meth.vec(.{ 0.0, 1.0 }),
+        },
+        .{
+            .position = meth.vec(.{ -0.5, 0.5 }),
+            .color = meth.vec(.{ 1.0, 1.0, 1.0 }),
+            .uv = meth.vec(.{ 1.0, 1.0 }),
+        },
     };
 
     vertex_buffer = VertexBuffer.create(&device, vertex_data.len) catch |err| {
         root_log.err("Failed to initialize vertex buffer: {!}", .{err});
         return err;
     };
-    // TODO: Interface casting shouldn't be required to use basic member functions lol
+
+    // FIXME: Interface casting shouldn't be required to use basic member functions lol
     // This literally sucks ass I don't care how cursed the implementation is,
     // it should not require this
     vb_interface = vertex_buffer.buffer();
@@ -305,7 +336,6 @@ pub fn testInit(allocator: Allocator) !void {
     //
 
     // create test textures and stuff I guess
-    test_tex = try TexImage.fromFile(&device, "textures/shrek.png", allocator);
 }
 
 pub fn setWindow(window: *glfw.Window) void {
@@ -344,7 +374,8 @@ fn updateUniforms() !void {
     //     ),
     //     .view = meth.zlm.Mat4.createLookAt(meth.zlm.vec3(2.0, 2.0, 2.0), meth.zlm.vec3(0, 0, 0), meth.zlm.Vec3.unitY),
     // };
-    try test_descriptor.update(&test_uniforms);
+
+    try test_descriptor.update(0, &test_uniforms);
 }
 
 pub fn testLoop() !void {
@@ -408,6 +439,8 @@ pub fn testDeinit() void {
 
     ib_interface.deinit();
     vb_interface.deinit();
+
+    uniform_buffer.buffer().deinit();
     framebuffers.deinit();
     graphics_pipeline.deinit();
     test_descriptor.deinit();

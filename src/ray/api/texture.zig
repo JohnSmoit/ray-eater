@@ -52,6 +52,7 @@ fn initSampler(self: *Self) !void {
 pub fn fromFile(dev: *const Device, filename: []const u8, allocator: Allocator) !Self {
     const image = try Image.fromFile(dev, filename, allocator);
     const view = try image.createView(); 
+
     var tex = Self{
         .img = image,
         .view = view,

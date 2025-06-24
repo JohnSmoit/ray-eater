@@ -1353,7 +1353,9 @@ pub const GraphicsPipeline = struct {
         }
 
         var pipeline: vk.Pipeline = undefined;
+        
 
+        //NOTE: Mario vvv
         _ = dev.pr_dev.createGraphicsPipelines(
             .null_handle,
             1,
