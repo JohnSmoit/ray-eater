@@ -295,14 +295,7 @@ pub const Mat4 = extern struct {
         const ty = -dot(y, eye);
         const tz = -dot(z, eye);
 
-        const adjustment = create(.{
-            .{ 1.0, 0.0, 0.0, 0.0 },
-            .{ 0.0, 1.0, 0.0, 0.0 },
-            .{ 0.0, 0.0, -1.0, 0.0 },
-            .{ 0.0, 0.0, 0.0, 1.0 },
-        });
-
-        return view.translate(vec(.{tx, ty, tz})).mul(adjustment);
+        return view.translate(vec(.{tx, ty, tz}));
     }
 
     pub fn perspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {

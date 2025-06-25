@@ -1125,7 +1125,7 @@ pub const FixedFunctionState = struct {
                     .y = 0,
                     .width = @floatFromInt(swapchain.extent.width),
                     .height = @floatFromInt(swapchain.extent.height),
-                    .min_depth = 1.0,
+                    .min_depth = 0.0,
                     .max_depth = 1.0,
                 },
                 vk.Rect2D{
@@ -1166,7 +1166,9 @@ pub const FixedFunctionState = struct {
             // which side of a polygon is front and back.
             // NOTE: Reversing some of these is probably a good idea if we wanted an inverted shape, like
             // for a cubemapped skybox!
-            .cull_mode = .{},
+            .cull_mode = .{
+                .back_bit = true,
+            },
             .front_face = .clockwise,
 
             // whether or not to bias fragment depth values
@@ -1437,6 +1439,7 @@ pub const GraphicsPipeline = struct {
             .front = undefined,
             .back = undefined,
         };
+
         _ = dev.pr_dev.createGraphicsPipelines(
             .null_handle,
             1,
@@ -1566,6 +1569,8 @@ pub const FrameBufferSet = struct {
         for (self.framebuffers) |fb| {
             self.pr_dev.destroyFramebuffer(fb, null);
         }
+
+        self.allocator.free(self.framebuffers);
     }
 };
 

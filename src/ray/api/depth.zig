@@ -8,11 +8,14 @@ const Device = api.Device;
 
 const Self = @This();
 
+const log = std.log.scoped(.depth_buffer);
+
 img: Image,
 view: ImageView,
 dev: *const Device,
 
 pub fn init(dev: *const Device, dimensions: vk.Extent2D) !Self {
+    log.debug("Chosen depth format: {s}", .{@tagName(try dev.findDepthFormat())});
     const image = try Image.init(dev, &.{
         .format = try dev.findDepthFormat(),
         .height = dimensions.height,
