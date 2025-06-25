@@ -298,6 +298,40 @@ pub const Device = struct {
         };
     }
 
+    pub fn findSupportedFormat(
+        self: *const Device,
+        candidates: []const vk.Format,
+        tiling: vk.ImageTiling,
+        features: vk.FormatFeatureFlags,
+    ) !vk.Format {
+        for (candidates) |fmt| {
+            const props = self.ctx.pr_inst.getPhysicalDeviceFormatProperties(self.h_pdev, fmt);
+
+            const matches = switch (tiling) {
+                .linear => props.linear_tiling_features.contains(features),
+                .optimal => props.optimal_tiling_features.contains(features),
+                else => return error.FormatNotSupported,
+            };
+
+            if (matches) {
+                return fmt;
+            }
+        }
+
+        return error.FormatNotSupported;
+    }
+
+    pub fn findDepthFormat(self: *const Device) !vk.Format {
+        return try self.findSupportedFormat(
+            &[_]vk.Format{
+                .d32_sfloat_s8_uint,
+                .d24_unorm_s8_uint,
+            },
+            .optimal,
+            .{ .depth_stencil_attachment_bit = true },
+        );
+    }
+
     ctx: *const Context,
     families: FamilyIndices,
     swapchain_details: SwapchainSupportDetails,
@@ -1214,50 +1248,68 @@ pub const FixedFunctionState = struct {
 };
 
 /// ## Usage
-/// for now, all you can really do is create this based on an existing
-/// Swapchain
+/// Since I'm lazy, all attachments need to be specified up front along with an allocator
+///
 pub const RenderPass = struct {
     pub const log = global_log.scoped(.renderpass);
     pr_dev: *const vk.DeviceProxy,
     h_rp: vk.RenderPass,
 
-    pub fn initFromSwapchain(dev: *const Device, swapchain: *const Swapchain) !RenderPass {
-        const color_attachment = vk.AttachmentDescription{
-            .format = swapchain.surface_format.format,
-            .samples = .{ .@"1_bit" = true },
+    pub const AttachmentType = enum {
+        Color,
+        Depth,
+    };
 
-            // what to do when loading and storing data from the attachment,
-            // for example we could set load to .load to use previous data within the attachment
-            // or .clear to clear the data to a constant value (think glClearColor)
-            .load_op = .clear,
-            .store_op = .store,
+    pub const ConfigEntry = struct {
+        attachment: vk.AttachmentDescription,
+        tipo: AttachmentType,
+    };
 
-            // we don't use stencil attachments yet
-            .stencil_load_op = .dont_care,
-            .stencil_store_op = .dont_care,
+    pub fn initAlloc(
+        dev: *const Device,
+        attachments: []const ConfigEntry,
+        allocator: Allocator,
+    ) !RenderPass {
+        var col_refs = try allocator.alloc(vk.AttachmentReference, attachments.len);
+        defer allocator.free(col_refs);
 
-            // these specify the memory layouts the attachment data should have
-            // before and after the renderpass is performed, this is a critical part of handling
-            // multiple gpu operations, since the memory layouts must be compatible with what each
-            // operation expects...
-            .initial_layout = .undefined,
-            .final_layout = .present_src_khr,
-        };
+        var attachments_list = try allocator.alloc(vk.AttachmentDescription, attachments.len);
+        defer allocator.free(attachments_list);
 
-        // create subpasses for our render pass
-        // Note that this ref is actually what the output values of a fragment shader write to!
-        // (as in: layout(location = 0) out vec4 outColor)
-        const color_attachment_ref = vk.AttachmentReference{
-            .attachment = 0,
-            .layout = .color_attachment_optimal,
-        };
+        var depth_ref: ?vk.AttachmentReference = null;
+
+        var col_count: u32 = 0;
+
+        for (attachments, 0..) |e, index| {
+            attachments_list[index] = e.attachment;
+
+            switch (e.tipo) {
+                .Color => {
+                    col_refs[col_count] = .{
+                        .attachment = @intCast(index),
+                        .layout = .color_attachment_optimal,
+                    };
+
+                    col_count += 1;
+                },
+                .Depth => {
+                    if (depth_ref != null) {
+                        return error.TooManyDepthAttachments;
+                    }
+
+                    depth_ref = .{
+                        .attachment = @intCast(index),
+                        .layout = .depth_stencil_attachment_optimal,
+                    };
+                },
+            }
+        }
 
         const subpass_desc = vk.SubpassDescription{
-            .color_attachment_count = 1,
-            .p_color_attachments = util.asManyPtr(
-                vk.AttachmentReference,
-                &color_attachment_ref,
-            ),
+            .color_attachment_count = col_count,
+            .p_color_attachments = col_refs.ptr,
+
+            .p_depth_stencil_attachment = if (depth_ref != null) &depth_ref.? else null,
             .pipeline_bind_point = .graphics,
         };
 
@@ -1265,16 +1317,25 @@ pub const RenderPass = struct {
             .src_subpass = vk.SUBPASS_EXTERNAL,
             .dst_subpass = 0,
 
-            .src_stage_mask = .{ .color_attachment_output_bit = true },
+            .src_stage_mask = .{
+                .color_attachment_output_bit = true,
+                .early_fragment_tests_bit = true,
+            },
             .src_access_mask = .{},
 
-            .dst_stage_mask = .{ .color_attachment_output_bit = true },
-            .dst_access_mask = .{ .color_attachment_write_bit = true },
+            .dst_stage_mask = .{
+                .color_attachment_output_bit = true,
+                .early_fragment_tests_bit = true,
+            },
+            .dst_access_mask = .{
+                .color_attachment_write_bit = true,
+                .depth_stencil_attachment_write_bit = true,
+            },
         };
 
         const renderpass = dev.pr_dev.createRenderPass(&.{
-            .attachment_count = 1,
-            .p_attachments = util.asManyPtr(vk.AttachmentDescription, &color_attachment),
+            .attachment_count = @intCast(attachments_list.len),
+            .p_attachments = attachments_list.ptr,
 
             .subpass_count = 1,
             .p_subpasses = util.asManyPtr(vk.SubpassDescription, &subpass_desc),
@@ -1301,14 +1362,18 @@ pub const RenderPass = struct {
 
     pub fn begin(self: *const RenderPass, cmd_buf: *const CommandBufferSet, framebuffers: *const FrameBufferSet, image_index: u32) void {
         const current_fb = framebuffers.get(image_index);
-        const clear_color = vk.ClearValue{ .color = .{ .float_32 = .{ 0, 0, 0, 0 } } };
+        const clear_colors = [2]vk.ClearValue{ .{ .color = .{
+            .float_32 = .{ 0, 0, 0, 1.0 },
+        } }, .{
+            .depth_stencil = .{ .depth = 1.0, .stencil = 0.0 },
+        } };
 
         self.pr_dev.cmdBeginRenderPass(cmd_buf.h_cmd_buffer, &.{
             .render_pass = self.h_rp,
             .framebuffer = current_fb.h_framebuffer,
             .render_area = current_fb.extent,
-            .clear_value_count = 1,
-            .p_clear_values = util.asManyPtr(vk.ClearValue, &clear_color),
+            .clear_value_count = clear_colors.len,
+            .p_clear_values = clear_colors[0..],
         }, .@"inline");
     }
 
@@ -1353,9 +1418,25 @@ pub const GraphicsPipeline = struct {
         }
 
         var pipeline: vk.Pipeline = undefined;
-        
 
-        //NOTE: Mario vvv
+        //NOTE: Mario vv
+
+        // This is hardcoded mainly for demonstration purposes
+        const depth_stencil = vk.PipelineDepthStencilStateCreateInfo{
+            .depth_test_enable = vk.TRUE,
+            .depth_write_enable = vk.TRUE,
+            .depth_compare_op = .less,
+
+            // depth ranges to discard fragments (not included)
+            .depth_bounds_test_enable = vk.FALSE,
+            .min_depth_bounds = 0.0,
+            .max_depth_bounds = 1.0,
+
+            // whether or not to also do stencil testing (not included)
+            .stencil_test_enable = vk.FALSE,
+            .front = undefined,
+            .back = undefined,
+        };
         _ = dev.pr_dev.createGraphicsPipelines(
             .null_handle,
             1,
@@ -1371,7 +1452,7 @@ pub const GraphicsPipeline = struct {
                     .p_viewport_state = &config.fixed_functions.viewport_state,
                     .p_rasterization_state = &config.fixed_functions.rasterizer_state,
                     .p_multisample_state = &config.fixed_functions.multisampling_state,
-                    .p_depth_stencil_state = null,
+                    .p_depth_stencil_state = &depth_stencil,
                     .p_color_blend_state = &config.fixed_functions.color_blending_state,
                     .p_dynamic_state = &config.fixed_functions.dynamic_states,
                     .layout = pipeline_layout,
@@ -1436,6 +1517,7 @@ pub const FrameBufferSet = struct {
     pub const Config = struct {
         renderpass: *const RenderPass,
         image_views: []const Swapchain.ImageInfo,
+        depth_view: ?vk.ImageView = null,
         extent: vk.Rect2D,
     };
 
@@ -1450,11 +1532,15 @@ pub const FrameBufferSet = struct {
     pub fn initAlloc(dev: *const Device, allocator: Allocator, config: *const Config) !FrameBufferSet {
         var framebuffers = try allocator.alloc(vk.Framebuffer, config.image_views.len);
 
+        const attachment_count: u32 = if (config.depth_view != null) 2 else 1;
+
         for (config.image_views, 0..) |*info, index| {
+            const views = [2]vk.ImageView{ info.h_view, config.depth_view orelse .null_handle };
+
             framebuffers[index] = try dev.pr_dev.createFramebuffer(&.{
                 .render_pass = config.renderpass.h_rp,
-                .attachment_count = 1,
-                .p_attachments = util.asManyPtr(vk.ImageView, &info.h_view),
+                .attachment_count = attachment_count,
+                .p_attachments = views[0..],
                 .width = config.extent.extent.width,
                 .height = config.extent.extent.height,
                 .layers = 1,
@@ -1547,7 +1633,7 @@ pub const CommandBufferSet = struct {
         // (by waiting idle)
         if (self.one_shot) {
             const submit_queue = try GraphicsQueue.init(self.dev);
-            try submit_queue.submit(self, null,null, null);
+            try submit_queue.submit(self, null, null, null);
             submit_queue.waitIdle();
         }
     }

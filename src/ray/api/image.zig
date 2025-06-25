@@ -49,6 +49,7 @@ pub const Config = struct {
     width: u32,
     height: u32,
     staging_buf: ?*StagingBuffer = null,
+    initial_layout: vk.ImageLayout,
 };
 
 // NOTE: Yet another instance of a BAD function that allocates device memory in a non-zig like fashion
@@ -79,7 +80,7 @@ fn createImageMemory(
     return mem;
 }
 
-pub fn createView(self: *const Self) !View {
+pub fn createView(self: *const Self, aspect_mask: vk.ImageAspectFlags) !View {
     const view = try self.dev.pr_dev.createImageView(&.{
         .image = self.h_img,
         .view_type = .@"2d",
@@ -91,7 +92,7 @@ pub fn createView(self: *const Self) !View {
             .a = .identity,
         },
         .subresource_range = .{
-            .aspect_mask = .{ .color_bit = true },
+            .aspect_mask = aspect_mask,
             .base_mip_level = 0,
             .level_count = 1,
             .base_array_layer = 0,
@@ -259,20 +260,34 @@ fn init_self(self: *Self, dev: *const Device, config: *const Config) !void {
     //  - Previously to this, the image had no layout since it was newly created, hence the UNDEFINED initial layout
     // 2. Transition from TRANSFER_DST_OPTIMAL to SHADER_READ_ONLY_OPTIMAL to prepare the image to be used a sampler
     // (Which obviously is accessed as read only from the shader using the sampler as an intermediary)
+
+
+    if (config.initial_layout == .undefined) {
+        return;
+    }
+
     if (config.staging_buf != null) {
         try self.transitionLayout(.undefined, .transfer_dst_optimal);
         try self.copyFromStaging(config.staging_buf.?, image_info.extent);
-        try self.transitionLayout(.transfer_dst_optimal, .shader_read_only_optimal);
+        try self.transitionLayout(.transfer_dst_optimal, config.initial_layout);
     } else {
         // NOTE: This disregards the fact that if a staging buffer is not used, then
         // the user is probably copying from host visible memory (not sure if this handles that
         // correctly)
-        try self.transitionLayout(.undefined, .shader_read_only_optimal);
+        try self.transitionLayout(.undefined, config.initial_layout);
     }
+}
+
+pub fn init(dev: *const Device, config: *const Config) !Self {
+    var image = Self{};
+    try image.init_self(dev, config);
+
+    return image;
 }
 
 /// creates a texture image and loads it from a provided file
 /// WARN: This is a shit way of differentiating images between textures and other image types
+/// Actually, this is shit in general, like this shit should be in the texture.zig like wtf
 pub fn fromFile(dev: *const Device, path: []const u8, allocator: Allocator) !Self {
     var image_data = rsh.loadImageFile(path, allocator) catch |err| {
         log.err("Failed to load image: {!}", .{err});
@@ -286,8 +301,7 @@ pub fn fromFile(dev: *const Device, path: []const u8, allocator: Allocator) !Sel
     try staging_buffer.buffer().setData(image_data.pixels.asBytes().ptr);
     defer staging_buffer.deinit();
 
-    var image = Self{};
-    try image.init_self(dev, &.{
+    const image = try Self.init(dev, &.{
         .format = .r8g8b8a8_srgb,
         .tiling = .optimal,
 
@@ -297,6 +311,7 @@ pub fn fromFile(dev: *const Device, path: []const u8, allocator: Allocator) !Sel
         .usage = .{ .transfer_dst_bit = true, .sampled_bit = true },
         .mem_flags = .{ .device_local_bit = true },
         .staging_buf = &staging_buffer,
+        .initial_layout = .shader_read_only_optimal,
     });
 
     return image;

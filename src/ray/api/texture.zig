@@ -28,11 +28,11 @@ fn initSampler(self: *Self) !void {
 
         .anisotropy_enable = vk.TRUE,
         .max_anisotropy = max_aniso,
-        
+
         // If address mode is set to border clamping, this is the color the sampler
         // will return if sampled beyond the image's limits
         .border_color = .int_opaque_black,
-        
+
         // As a shader freak, I generally prefer my sampler coordinates to be normalized :}
         .unnormalized_coordinates = vk.FALSE,
 
@@ -40,7 +40,7 @@ fn initSampler(self: *Self) !void {
         // (sometimes helpful for shadow mapping apparently)
         .compare_enable = vk.FALSE,
         .compare_op = .always,
-        
+
         // Mipmapping stuff -- TBD
         .mipmap_mode = .linear,
         .mip_lod_bias = 0,
@@ -51,7 +51,7 @@ fn initSampler(self: *Self) !void {
 
 pub fn fromFile(dev: *const Device, filename: []const u8, allocator: Allocator) !Self {
     const image = try Image.fromFile(dev, filename, allocator);
-    const view = try image.createView(); 
+    const view = try image.createView(.{ .color_bit = true });
 
     var tex = Self{
         .img = image,
@@ -60,10 +60,9 @@ pub fn fromFile(dev: *const Device, filename: []const u8, allocator: Allocator) 
     };
 
     try tex.initSampler();
-    
-    return tex;
-} 
 
+    return tex;
+}
 
 pub fn deinit(self: *const Self) void {
     self.dev.pr_dev.destroySampler(self.h_sampler, null);

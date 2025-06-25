@@ -11,6 +11,7 @@ pub const meth = @import("math.zig");
 const descriptor = @import("api/descriptor.zig");
 
 const TexImage = @import("api/texture.zig");
+const DepthImage = @import("api/depth.zig");
 
 const vb = @import("api/vertex_buffer.zig");
 const ib = @import("api/index_buffer.zig");
@@ -55,6 +56,8 @@ var graphics_pipeline: api.GraphicsPipeline = undefined;
 
 // rendering stuff
 var framebuffers: api.FrameBufferSet = undefined;
+var depth_image: DepthImage = undefined;
+
 var command_buffer: api.CommandBufferSet = undefined;
 
 const validation_layers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
@@ -65,7 +68,7 @@ var image_finished_semaphore: vk.Semaphore = .null_handle;
 var present_finished_fence: vk.Fence = .null_handle;
 
 const TestVertexInput = extern struct {
-    position: meth.Vec2,
+    position: meth.Vec3,
     color: meth.Vec3,
     uv: meth.Vec2,
 };
@@ -222,7 +225,35 @@ pub fn testInit(allocator: Allocator) !void {
     defer fixed_function_state.deinit();
 
     // test create render pass state and stuff i guess
-    renderpass = try api.RenderPass.initFromSwapchain(&device, &swapchain);
+
+    renderpass = try api.RenderPass.initAlloc(&device, &[_]api.RenderPass.ConfigEntry{
+        .{
+            .attachment = .{
+                .format = swapchain.surface_format.format,
+                .samples = .{ .@"1_bit" = true },
+                .load_op = .clear,
+                .store_op = .store,
+                .stencil_load_op = .dont_care,
+                .stencil_store_op = .dont_care,
+                .initial_layout = .undefined,
+                .final_layout = .present_src_khr,
+            },
+            .tipo = .Color,
+        },
+        .{
+            .attachment = .{
+                .format = try device.findDepthFormat(),
+                .samples = .{ .@"1_bit" = true },
+                .load_op = .clear,
+                .store_op = .dont_care,
+                .stencil_load_op = .dont_care,
+                .stencil_store_op = .dont_care,
+                .initial_layout = .undefined,
+                .final_layout = .depth_stencil_attachment_optimal,
+            },
+            .tipo = .Depth,
+        },
+    }, scratch);
     errdefer renderpass.deinit();
 
     graphics_pipeline = try api.GraphicsPipeline.init(&device, &.{
@@ -232,9 +263,13 @@ pub fn testInit(allocator: Allocator) !void {
     }, scratch);
     errdefer graphics_pipeline.deinit();
 
+    depth_image = try DepthImage.init(&device, swapchain.extent);
+    errdefer depth_image.deinit();
+
     framebuffers = try api.FrameBufferSet.initAlloc(&device, allocator, &.{
         .renderpass = &renderpass,
         .image_views = swapchain.images,
+        .depth_view = depth_image.view.h_view,
         .extent = vk.Rect2D{
             .extent = swapchain.extent,
             .offset = .{ .x = 0, .y = 0 },
@@ -255,26 +290,15 @@ pub fn testInit(allocator: Allocator) !void {
 
     // test vertex data and stuff
     const vertex_data = [_]TestVertexInput{
-        .{
-            .position = meth.vec(.{ -0.5, -0.5 }),
-            .color = meth.vec(.{ 1.0, 0.0, 0.0 }),
-            .uv = meth.vec(.{ 1.0, 0.0 }),
-        },
-        .{
-            .position = meth.vec(.{ 0.5, -0.5 }),
-            .color = meth.vec(.{ 0.0, 1.0, 0.0 }),
-            .uv = meth.vec(.{ 0.0, 0.0 }),
-        },
-        .{
-            .position = meth.vec(.{ 0.5, 0.5 }),
-            .color = meth.vec(.{ 0.0, 0.0, 1.0 }),
-            .uv = meth.vec(.{ 0.0, 1.0 }),
-        },
-        .{
-            .position = meth.vec(.{ -0.5, 0.5 }),
-            .color = meth.vec(.{ 1.0, 1.0, 1.0 }),
-            .uv = meth.vec(.{ 1.0, 1.0 }),
-        },
+        .{ .position = meth.vec(.{ -0.5, 0.0, -0.5 }), .color = meth.vec(.{ 1.0, 0.0, 0.0 }), .uv = meth.vec(.{ 1.0, 0.0 }) },
+        .{ .position = meth.vec(.{ 0.5, 0.0, -0.5 }), .color = meth.vec(.{ 0.0, 1.0, 0.0 }), .uv = meth.vec(.{ 0.0, 0.0 }) },
+        .{ .position = meth.vec(.{ 0.5, 0.0, 0.5 }), .color = meth.vec(.{ 0.0, 0.0, 1.0 }), .uv = meth.vec(.{ 0.0, 1.0 }) },
+        .{ .position = meth.vec(.{ -0.5, 0.0, 0.5 }), .color = meth.vec(.{ 1.0, 1.0, 1.0 }), .uv = meth.vec(.{ 1.0, 1.0 }) },
+
+        .{ .position = meth.vec(.{ -0.5, 0.5, -0.5 }), .color = meth.vec(.{ 1.0, 0.0, 0.0 }), .uv = meth.vec(.{ 1.0, 0.0 }) },
+        .{ .position = meth.vec(.{ 0.5, 0.5, -0.5 }), .color = meth.vec(.{ 0.0, 1.0, 0.0 }), .uv = meth.vec(.{ 0.0, 0.0 }) },
+        .{ .position = meth.vec(.{ 0.5, 0.5, 0.5 }), .color = meth.vec(.{ 0.0, 0.0, 1.0 }), .uv = meth.vec(.{ 0.0, 1.0 }) },
+        .{ .position = meth.vec(.{ -0.5, 0.5, 0.5 }), .color = meth.vec(.{ 1.0, 1.0, 1.0 }), .uv = meth.vec(.{ 1.0, 1.0 }) },
     };
 
     vertex_buffer = VertexBuffer.create(&device, vertex_data.len) catch |err| {
@@ -293,7 +317,7 @@ pub fn testInit(allocator: Allocator) !void {
         return err;
     };
 
-    const index_data = [_]u16{ 0, 1, 2, 2, 3, 0 };
+    const index_data = [_]u16{ 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4 };
 
     index_buffer = IndexBuffer.create(&device, index_data.len) catch |err| {
         root_log.err("Failed to initialize index buffer: {!}", .{err});
@@ -406,7 +430,7 @@ pub fn testLoop() !void {
     ib_interface.bind(&command_buffer);
     test_descriptor.bind(&command_buffer, graphics_pipeline.h_pipeline_layout);
 
-    device.drawIndexed(&command_buffer, 6, 1, 0, 0, 0);
+    device.drawIndexed(&command_buffer, @intCast(index_buffer.buf.size), 1, 0, 0, 0);
 
     renderpass.end(&command_buffer);
 
@@ -441,6 +465,8 @@ pub fn testDeinit() void {
     vb_interface.deinit();
 
     uniform_buffer.buffer().deinit();
+
+    depth_image.deinit();
     framebuffers.deinit();
     graphics_pipeline.deinit();
     test_descriptor.deinit();
