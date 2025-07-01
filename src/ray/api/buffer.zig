@@ -17,6 +17,10 @@ pub const Config = struct {
     memory: vk.MemoryPropertyFlags = .{},
 };
 
+const BindFn =  *const (fn (*anyopaque, *const api.CommandBufferSet) void);
+const SetDataFn = *const (fn (*anyopaque, *const anyopaque) anyerror!void);
+const DeinitFn = *const (fn (*anyopaque) void);
+
 const VTable = struct {
     bind: *const (fn (*anyopaque, *const api.CommandBufferSet) void) = undefined,
 
@@ -54,6 +58,21 @@ pub const AnyBuffer = struct {
         self.vtable.deinit(self.ptr);
     }
 };
+
+/// Ease-of-use mixins for creating opaque vtable functions
+/// TODO: make this
+
+pub fn BindMixin() BindFn {
+
+}
+
+pub fn SetDataMixin() SetDataFn {
+
+}
+
+pub fn DeinitMixin() DeinitFn {
+
+}
 
 pub fn copy(src: AnyBuffer, dst: AnyBuffer, dev: *const api.Device) !void {
     assert(src.cfg.usage.contains(.{ .transfer_src_bit = true }));
