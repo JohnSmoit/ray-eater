@@ -13,6 +13,8 @@ pub const GlobalInterface = vk.BaseWrapper;
 pub const InstanceInterface = vk.InstanceProxy;
 pub const DeviceInterface = vk.DeviceProxy;
 
+pub const VulkanAPI = vkb.VulkanAPI;
+
 // vulkan base types
 pub const Instance = vkb.Context; 
 pub const Device = vkb.Device;

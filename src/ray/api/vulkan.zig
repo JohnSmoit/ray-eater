@@ -44,6 +44,14 @@ pub const ContextConfig = struct {
     enable_debug_log: bool,
 };
 
+/// All this really helps with is easier
+/// heap allocation (y'know, reducing possible failure points from 3 to 1)
+pub const VulkanAPI = struct {   
+    global_interface: vk.BaseWrapper,
+    inst_interface: vk.InstanceProxy,
+    dev_interface: vk.DeviceProxy,
+};
+
 fn debugCallback(message_severity: vk.DebugUtilsMessageSeverityFlagsEXT, message_type: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, p_user_data: ?*anyopaque) callconv(.c) vk.Bool32 {
     const callback_data = p_callback_data orelse {
         validation_log.err("Something probably bad happened but vulkan won't fucking give me the info", .{});
