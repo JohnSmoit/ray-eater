@@ -6,6 +6,8 @@ const glfw = @import("glfw");
 const Window = glfw.Window;
 
 pub fn main() !void {
+    const ctx = ray.Context.init();
+    _ = ctx.env(.di);
     glfw.init() catch |err| {
         std.debug.print("Failed to initialize GLFW\n", .{});
         return err;

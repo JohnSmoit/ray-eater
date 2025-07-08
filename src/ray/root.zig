@@ -10,6 +10,10 @@ const buffer = @import("api/buffer.zig");
 pub const meth = @import("math.zig");
 const descriptor = @import("api/descriptor.zig");
 
+pub const Context = @import("context.zig");
+
+
+// WARN: Basically everything under this line will be yeeted in favor of the new context system
 const TexImage = @import("api/texture.zig");
 const DepthImage = @import("api/depth.zig");
 
