@@ -142,13 +142,11 @@ pub fn testInit(allocator: Allocator) !void {
         },
         .device = undefined,
         .enable_debug_log = true,
-        .window = window_handle orelse {
-            return error.NoWindowSpecified;
-        },
     });
     errdefer context.deinit();
 
-    surface = try api.Surface.init(window_handle.?, &context);
+    surface = try api.Surface.init(window_handle orelse
+        return error.NoWindowSpecified, &context);
     errdefer surface.deinit();
 
     device = try api.Device.init(&context, &.{

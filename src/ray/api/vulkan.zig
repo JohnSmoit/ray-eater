@@ -39,7 +39,6 @@ pub const ContextConfig = struct {
     },
 
     loader: GetProcAddrHandler,
-    window: *glfw.Window,
     allocator: Allocator,
     enable_debug_log: bool,
 };
@@ -760,11 +759,11 @@ pub const ComputeQueue = GenericQueue(.Compute);
 
 pub const Surface = struct {
     pub const log = global_log.scoped(.surface);
-    h_window: *glfw.Window = undefined,
+    h_window: *const glfw.Window = undefined,
     h_surface: vk.SurfaceKHR = .null_handle,
     ctx: *const Context = undefined,
 
-    pub fn init(window: *glfw.Window, ctx: *const Context) !Surface {
+    pub fn init(window: *const glfw.Window, ctx: *const Context) !Surface {
         var surface: vk.SurfaceKHR = undefined;
 
         if (glfw.glfwCreateWindowSurface(ctx.pr_inst.handle, window.handle, null, &surface) != .success) {

@@ -13,9 +13,12 @@ pub const GlobalInterface = vk.BaseWrapper;
 pub const InstanceInterface = vk.InstanceProxy;
 pub const DeviceInterface = vk.DeviceProxy;
 
-pub const VulkanAPI = vkb.VulkanAPI;
+/// All registered extensions for devices and instances
+pub const extensions = vk.extensions;
 
 // vulkan base types
+pub const VulkanAPI = vkb.VulkanAPI;
+
 pub const Instance = vkb.Context; 
 pub const Device = vkb.Device;
 pub const Surface = vkb.Surface;

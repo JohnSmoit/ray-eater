@@ -12,6 +12,8 @@ const vk = @import("vulkan");
 pub const TRUE = c.GLFW_TRUE;
 pub const FALSE = c.GLFW_FALSE;
 
+pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0]const u8) callconv(.c) vk.PfnVoidFunction);
+
 // Window Hint Values
 pub const CLIENT_API = c.GLFW_CLIENT_API;
 pub const NO_API = c.GLFW_NO_API;
@@ -57,11 +59,11 @@ const glfwWindowHint = c.glfwWindowHint;
 pub const Window = struct {
     handle: *GLFWwindow,
 
-    pub fn destroy(self: *Window) void {
+    pub fn destroy(self: *const Window) void {
         glfwDestroyWindow(self.handle);
     }
 
-    pub fn shouldClose(self: *Window) bool {
+    pub fn shouldClose(self: *const Window) bool {
         return glfwWindowShouldClose(self.handle) == TRUE;
     }
 
@@ -81,7 +83,7 @@ pub const Window = struct {
         }
     }
 
-    pub fn show(self: *Window) void {
+    pub fn show(self: *const Window) void {
         c.glfwShowWindow(self.handle);
     }
 };

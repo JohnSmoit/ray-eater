@@ -24,6 +24,8 @@ fn ContextEnumFromFields(comptime T: type) type {
         .@"struct" => |st| {
             comptime var vals: []const EnumField = &.{};
 
+            @compileLog("Fuck: ", T.InnerType);
+
             for (st.fields, 0..) |fld, v| {
                 vals = vals ++ [_]EnumField{.{
                     .name = fld.name,
@@ -81,6 +83,8 @@ pub fn For(comptime T: type) type {
         const Bindings = MakeRefBindings(T);
         const Self = @This();
 
+        inner: T,
+
         pub fn ResolveInner(comptime field: ContextEnum) type {
             return Bindings.typeFor(field);
         }
@@ -89,10 +93,21 @@ pub fn For(comptime T: type) type {
             _ = self;
             return undefined;
         }
-        
-        ///TODO: Implement (since this'll be used for basically all vulkan types
-        pub fn scope(comptime fields: anytype) type {
-            _ = fields;
+
+        pub fn init(val: anytype) Self {
+
+            _ = val;
+            return undefined;
         }
+        
+        // fields must be a compile-time known tuple of whatever ContextEnum (backing struct fields enum)
+        // values are.
+        // self.env.get(.di).something...;
+        //
+        // Actually, not sure this really helps, 
+        // so imma omit it for now..
+        // pub fn Scope(comptime fields: anytype) type {
+        //     _ = fields;
+        // }
     };
 }
