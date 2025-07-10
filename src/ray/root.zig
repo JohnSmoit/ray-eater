@@ -2,7 +2,7 @@
 //! you are making an executable, the convention is to delete this file and
 //! start with main.zig instead.
 const std = @import("std");
-const api = @import("api/vulkan.zig");
+const vk_api = @import("api/vulkan.zig");
 const util = @import("util.zig");
 
 const shader = @import("api/shader.zig");
@@ -11,9 +11,11 @@ pub const meth = @import("math.zig");
 const descriptor = @import("api/descriptor.zig");
 
 pub const Context = @import("context.zig");
+pub const api = @import("api.zig");
 
 
 // WARN: Basically everything under this line will be yeeted in favor of the new context system
+// (Once it's done)
 const TexImage = @import("api/texture.zig");
 const DepthImage = @import("api/depth.zig");
 
@@ -27,8 +29,8 @@ const glfw = @import("glfw");
 
 // NOTE: Temporary disgusting type exports in favor of slapping something together quicky
 // please provide a custom loader function ASAP
-pub const VkInstance = api.VkInstance;
-pub const VkPfnVoidFunction = api.VkPfnVoidFunction;
+pub const VkInstance = vk_api.VkInstance;
+pub const VkPfnVoidFunction = vk_api.VkPfnVoidFunction;
 
 const Allocator = std.mem.Allocator;
 
@@ -44,25 +46,25 @@ const glfw_log = std.log.scoped(.glfw);
 var external_extensions: ?[][*:0]const u8 = null;
 
 // temporary global vulkan state objects, most of which will be my wrapper types
-var context: api.Context = undefined;
-var device: api.Device = undefined;
-var surface: api.Surface = undefined;
+var context: vk_api.Context = undefined;
+var device: vk_api.Device = undefined;
+var surface: vk_api.Surface = undefined;
 
-var graphics_queue: api.GraphicsQueue = undefined;
-var present_queue: api.PresentQueue = undefined;
-var swapchain: api.Swapchain = undefined;
+var graphics_queue: vk_api.GraphicsQueue = undefined;
+var present_queue: vk_api.PresentQueue = undefined;
+var swapchain: vk_api.Swapchain = undefined;
 
 var window_handle: ?*glfw.Window = null;
 
-var renderpass: api.RenderPass = undefined;
+var renderpass: vk_api.RenderPass = undefined;
 
-var graphics_pipeline: api.GraphicsPipeline = undefined;
+var graphics_pipeline: vk_api.GraphicsPipeline = undefined;
 
 // rendering stuff
-var framebuffers: api.FrameBufferSet = undefined;
+var framebuffers: vk_api.FrameBufferSet = undefined;
 var depth_image: DepthImage = undefined;
 
-var command_buffer: api.CommandBufferSet = undefined;
+var command_buffer: vk_api.CommandBufferSet = undefined;
 
 const validation_layers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
 const device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
@@ -133,7 +135,7 @@ pub fn testInit(allocator: Allocator) !void {
         vk.extensions.ext_debug_utils.name,
     });
 
-    context = try api.Context.init(&.{
+    context = try vk_api.Context.init(&.{
         .loader = glfw.glfwGetInstanceProcAddress,
         .allocator = allocator,
         .instance = .{
@@ -145,23 +147,23 @@ pub fn testInit(allocator: Allocator) !void {
     });
     errdefer context.deinit();
 
-    surface = try api.Surface.init(window_handle orelse
+    surface = try vk_api.Surface.init(window_handle orelse
         return error.NoWindowSpecified, &context);
     errdefer surface.deinit();
 
-    device = try api.Device.init(&context, &.{
+    device = try vk_api.Device.init(&context, &.{
         .surface = &surface,
         .required_extensions = &device_extensions,
     });
     errdefer device.deinit();
 
-    graphics_queue = try api.GraphicsQueue.init(&device);
+    graphics_queue = try vk_api.GraphicsQueue.init(&device);
     errdefer graphics_queue.deinit();
 
-    present_queue = try api.PresentQueue.init(&device);
+    present_queue = try vk_api.PresentQueue.init(&device);
     errdefer present_queue.deinit();
 
-    swapchain = try api.Swapchain.init(&device, &surface, &.{
+    swapchain = try vk_api.Swapchain.init(&device, &surface, &.{
         .requested_present_mode = .mailbox_khr,
         .requested_format = .{
             .color_space = .srgb_nonlinear_khr,
@@ -215,7 +217,7 @@ pub fn testInit(allocator: Allocator) !void {
     });
     errdefer test_descriptor.deinit();
 
-    var fixed_function_state = api.FixedFunctionState{};
+    var fixed_function_state = vk_api.FixedFunctionState{};
     fixed_function_state.init_self(&device, &.{
         .viewport = .{ .Swapchain = &swapchain },
         .dynamic_states = &dynamic_states,
@@ -228,7 +230,7 @@ pub fn testInit(allocator: Allocator) !void {
 
     // test create render pass state and stuff i guess
 
-    renderpass = try api.RenderPass.initAlloc(&device, &[_]api.RenderPass.ConfigEntry{
+    renderpass = try vk_api.RenderPass.initAlloc(&device, &[_]vk_api.RenderPass.ConfigEntry{
         .{
             .attachment = .{
                 .format = swapchain.surface_format.format,
@@ -258,7 +260,7 @@ pub fn testInit(allocator: Allocator) !void {
     }, scratch);
     errdefer renderpass.deinit();
 
-    graphics_pipeline = try api.GraphicsPipeline.init(&device, &.{
+    graphics_pipeline = try vk_api.GraphicsPipeline.init(&device, &.{
         .renderpass = &renderpass,
         .fixed_functions = &fixed_function_state,
         .shader_stages = &[_]shader.Module{ vert_shader_module, frag_shader_module },
@@ -268,7 +270,7 @@ pub fn testInit(allocator: Allocator) !void {
     depth_image = try DepthImage.init(&device, swapchain.extent);
     errdefer depth_image.deinit();
 
-    framebuffers = try api.FrameBufferSet.initAlloc(&device, allocator, &.{
+    framebuffers = try vk_api.FrameBufferSet.initAlloc(&device, allocator, &.{
         .renderpass = &renderpass,
         .image_views = swapchain.images,
         .depth_view = depth_image.view.h_view,
@@ -288,7 +290,7 @@ pub fn testInit(allocator: Allocator) !void {
         .flags = .{ .signaled_bit = true },
     }, null);
 
-    command_buffer = try api.CommandBufferSet.init(&device);
+    command_buffer = try vk_api.CommandBufferSet.init(&device);
 
     // test vertex data and stuff
     const vertex_data = [_]TestVertexInput{

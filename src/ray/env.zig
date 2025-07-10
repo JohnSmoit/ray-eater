@@ -2,18 +2,19 @@ const std = @import("std");
 const RefConfig = struct {
     field: ?[]const u8 = null,
 };
-/// returns a const non-owning pointer to the object 
+/// returns a const non-owning pointer to the object
 /// (might enforce a bit more memory safety here later)
 pub fn Ref(comptime T: type, comptime config: RefConfig) type {
     return struct {
         pub const field = config.field;
-        pub const InnerType = T;
+        pub const InnerType = *const T;
         const Self = @This();
-        
-        inner: *const InnerType,
+
+        inner: InnerType,
     };
 }
 
+const StructField = std.builtin.Type.StructField;
 const EnumField = std.builtin.Type.EnumField;
 const Enum = std.builtin.Type.Enum;
 
@@ -24,35 +25,49 @@ fn ContextEnumFromFields(comptime T: type) type {
         .@"struct" => |st| {
             comptime var vals: []const EnumField = &.{};
 
-            @compileLog("Fuck: ", T.InnerType);
-
             for (st.fields, 0..) |fld, v| {
                 vals = vals ++ [_]EnumField{.{
                     .name = fld.name,
                     .value = v,
                 }};
             }
-            return @Type(.{
-                .@"enum" = std.builtin.Type.Enum{
-                    .tag_type = u16,
-                    .decls = &.{},
-                    .is_exhaustive = true,
-                    .fields = vals,
-                }
-            });
+            return @Type(.{ .@"enum" = std.builtin.Type.Enum{
+                .tag_type = u16,
+                .decls = &.{},
+                .is_exhaustive = true,
+                .fields = vals,
+            } });
         },
         else => unreachable,
     }
-
 }
 
+fn validateFieldAsRef(field: StructField) bool {
+    const declType: type = if (@hasDecl(field.type, "InnerType"))
+        field.type.InnerType
+    else
+        return false;
+
+    const innerField: type = if (@hasField(field.type, "inner"))
+        @FieldType(field.type, "inner")
+    else
+        return false;
+
+    return innerField == declType;
+}
+
+// precheck the given type to prevent any... oopsies
 fn validateType(comptime T: type) void {
     switch (@typeInfo(T)) {
-        .@"struct" => {},
+        .@"struct" => |st| {
+            for (st.fields) |fld| {
+                if (!validateFieldAsRef(fld))
+                    @compileError("Invalid env backing type, all fields must be Refs! " ++ @typeName(fld.type));
+            }
+        },
         else => @compileError("Invalid Env backing type: " ++ @typeName(T)),
     }
 }
-
 
 fn MakeRefBindings(comptime T: type) type {
     // given this is an internal function, I don't think it matters that we check
@@ -60,17 +75,22 @@ fn MakeRefBindings(comptime T: type) type {
     const info = @typeInfo(T).@"struct";
 
     // this will need to work with only consecutive valued enums defined by ContextEnumFromFields (or else everything will explode lmao)
-    comptime var typeMap: []const type = &.{};
+    comptime var typeMap: []const struct { type, []const u8 } = &.{};
 
     for (info.fields) |fld| {
-        typeMap = typeMap ++ [1]type{fld.type};
+        typeMap = typeMap ++ [1]type{ fld.type, fld.type.field orelse fld.name };
     }
 
     return struct {
         const FieldSetEnum = ContextEnumFromFields(T);
+        const map = typeMap;
 
         pub fn typeFor(comptime val: FieldSetEnum) type {
-            return typeMap[@intFromEnum(val)];
+            return typeMap[@intFromEnum(val)][0];
+        }
+
+        pub fn fieldName(comptime val: FieldSetEnum) []const u8 {
+            return typeMap[@intFromEnum(val)][1];
         }
     };
 }
@@ -90,24 +110,24 @@ pub fn For(comptime T: type) type {
         }
 
         pub fn get(self: *const Self, comptime field: ContextEnum) ResolveInner(field) {
-            _ = self;
-            return undefined;
-        }
+            const name = Bindings.fieldName(field);
 
-        pub fn init(val: anytype) Self {
-
-            _ = val;
-            return undefined;
+            return @field(self.inner, name).inner;
         }
         
-        // fields must be a compile-time known tuple of whatever ContextEnum (backing struct fields enum)
-        // values are.
-        // self.env.get(.di).something...;
-        //
-        // Actually, not sure this really helps, 
-        // so imma omit it for now..
-        // pub fn Scope(comptime fields: anytype) type {
-        //     _ = fields;
-        // }
+        /// Must be initialized from a parent instance with compatible fields
+        /// as defined in the initial env backing struct used when generating the environment
+        ///
+        /// val must also be a pointer to the instance since the environment works entirely off of pointers.
+        /// It is up to the caller to ensure that environment pointers stay valid for the lifetime of the environment
+        /// (Which basically means don't carelessly init the env from a local instance)
+        pub fn init(val: anytype) Self {
+            const ParentType = @TypeOf(val);
+            const parent_info = @typeInfo(ParentType).@"struct";
+
+            inline for (parent_info.fields) |fld| {
+                const field_type_info = @typeInfo(fld.type);
+            }
+        }
     };
 }

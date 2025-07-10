@@ -51,7 +51,7 @@ dev_interface: *const DeviceInterface,
 
 // NOTE: Planning on centralizing the entire vulkan API into a single struct for better
 // management, but not needed for now
-//vk_api: VulkanAPI, // heap allocated cuz big
+// vk_api: VulkanAPI, // heap allocated cuz big
 
 allocator: Allocator,
 
