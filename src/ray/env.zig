@@ -1,3 +1,7 @@
+//! Note:
+//! Backing in this context refers to the actual struct used to track the references
+//! to environment data
+//! and parent type refers to the actual object that owns the data.
 const std = @import("std");
 const RefConfig = struct {
     field: ?[]const u8 = null,
@@ -115,6 +119,13 @@ pub fn For(comptime T: type) type {
             return @field(self.inner, name).inner;
         }
         
+        fn findMatchingFieldInBacking(mt: type, name: []const u8) !StructField {
+        }
+
+        fn findMatchingFieldInParent(pt: type, mt: type, name: []const u8) !StructField {
+            
+        }
+        
         /// Must be initialized from a parent instance with compatible fields
         /// as defined in the initial env backing struct used when generating the environment
         ///
@@ -123,11 +134,34 @@ pub fn For(comptime T: type) type {
         /// (Which basically means don't carelessly init the env from a local instance)
         pub fn init(val: anytype) Self {
             const ParentType = @TypeOf(val);
-            const parent_info = @typeInfo(ParentType).@"struct";
 
-            inline for (parent_info.fields) |fld| {
-                const field_type_info = @typeInfo(fld.type);
+            // this must refer to a pointer
+            comptime {
+                const parent_info = @typeInfo(ParentType);
+
+                switch(parent_info) {
+                    .pointer => {},
+                    else => @compileError("Env structs must be initialized from a valid pointer!"),
+                }
             }
+
+            var backing: T = undefined;
+
+            inline for (Bindings.map) |*bind| {
+                const backing_field = try findMatchingFieldInBacking(bind[0], bind[1]);
+                const parent_field = try findMatchingFieldInParent(ParentType, bind[0], bind[1]);
+
+                // if the field is a pointer, simply copy it over to the inner struct
+                @field(backing, backing_field.name).inner = switch (@typeInfo(parent_field.type)) {
+                    .pointer => @field(val, parent_field.name),
+                    else => &@field(val, parent_field.name),
+                };
+                // otherwise, make a reference to it in the parent (this is why a pointer must be passed)
+            }
+
+            return Self {
+                .inner = backing,
+            };
         }
     };
 }
