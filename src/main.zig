@@ -24,7 +24,7 @@ fn makeBasicWindow(w: u32, h: u32, name: []const u8) !Window {
     };
 
     return window;
-} 
+}
 
 fn glfwInstanceExtensions() [][*:0]const u8 {
     var count: u32 = 0;
@@ -41,7 +41,7 @@ pub fn main() !void {
         return err;
     };
 
-    var gpa = std.heap.DebugAllocator(.{}).init;  
+    var gpa = std.heap.DebugAllocator(.{}).init;
 
     window.show();
 
@@ -57,13 +57,12 @@ pub fn main() !void {
         try ray.testLoop();
     }
 
-
     std.debug.print("You win!\n", .{});
 }
 
 const expect = std.testing.expect;
 
-var testing_allocator = std.heap.DebugAllocator(.{.safety = true}).init;
+var testing_allocator = std.heap.DebugAllocator(.{ .safety = true }).init;
 
 test "context initialization" {
     const alloc = testing_allocator.allocator();
@@ -92,7 +91,7 @@ test "environment querying" {
     });
     defer ctx.deinit();
 
-    const global_interface = ctx.env(.gi);
+    const global_interface: *const ray.api.GlobalInterface = ctx.env(.gi);
     const instance_interface = ctx.env(.ii);
     const dev_interface = ctx.env(.di);
 
@@ -100,8 +99,14 @@ test "environment querying" {
     std.debug.print("instance_interface type: {s}\n", .{@typeName(@TypeOf(instance_interface))});
     std.debug.print("dev_interface type: {s}\n", .{@typeName(@TypeOf(dev_interface))});
 
-    
     //TODO: Do some rudimentary vulkan API test call.
+    const available = global_interface.enumerateInstanceExtensionPropertiesAlloc(
+        null,
+        alloc,
+    ) catch {
+        return error.ExtensionEnumerationFailed;
+    };
+    defer alloc.free(available);
 }
 
 test "basic vulkan type creation" {

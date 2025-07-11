@@ -73,16 +73,26 @@ fn validateType(comptime T: type) void {
     }
 }
 
+const BindingEntry = struct {
+    ft: type,
+    parent_name: []const u8,
+    backing_name: []const u8,
+};
+
 fn MakeRefBindings(comptime T: type) type {
     // given this is an internal function, I don't think it matters that we check
     // for the datatype being valid here... (it is done previously)
     const info = @typeInfo(T).@"struct";
 
     // this will need to work with only consecutive valued enums defined by ContextEnumFromFields (or else everything will explode lmao)
-    comptime var typeMap: []const struct { type, []const u8 } = &.{};
+    comptime var typeMap: []const BindingEntry = &.{};
 
     for (info.fields) |fld| {
-        typeMap = typeMap ++ [1]type{ fld.type, fld.type.field orelse fld.name };
+        typeMap = typeMap ++ [1]BindingEntry{.{
+            .ft = fld.type.InnerType,
+            .parent_name = fld.type.field orelse fld.name,
+            .backing_name = fld.name,
+        }};
     }
 
     return struct {
@@ -90,13 +100,23 @@ fn MakeRefBindings(comptime T: type) type {
         const map = typeMap;
 
         pub fn typeFor(comptime val: FieldSetEnum) type {
-            return typeMap[@intFromEnum(val)][0];
+            return typeMap[@intFromEnum(val)].ft;
         }
 
         pub fn fieldName(comptime val: FieldSetEnum) []const u8 {
-            return typeMap[@intFromEnum(val)][1];
+            return typeMap[@intFromEnum(val)].backing_name;
         }
     };
+}
+
+fn findParentFieldType(pt: type, fname: []const u8) type {
+    const fields = @typeInfo(@typeInfo(pt).pointer.child);
+
+    for (fields.@"struct".fields) |fld| {
+        if (std.mem.order(u8, fname, fld.name) == .eq) return fld.type;
+    }
+
+    unreachable;
 }
 
 pub fn For(comptime T: type) type {
@@ -114,18 +134,24 @@ pub fn For(comptime T: type) type {
         }
 
         pub fn get(self: *const Self, comptime field: ContextEnum) ResolveInner(field) {
-            const name = Bindings.fieldName(field);
+            const name = comptime Bindings.fieldName(field);
 
             return @field(self.inner, name).inner;
         }
-        
-        fn findMatchingFieldInBacking(mt: type, name: []const u8) !StructField {
+
+        /// 'name' should be the backing field's name
+        /// also, we need the pointer version of the mt field
+        fn findMatchingFieldInBacking(mt: type, name: []const u8) !BindingEntry {
+            const PointerType = @Type(.{
+                .Pointer = .{ .child = mt },
+            });
+
+            for (Bindings.map) |entry| {
+                if (mt == PointerType and std.mem.order(u8, name, entry.backing_name) == .eq)
+                    return entry;
+            }
         }
 
-        fn findMatchingFieldInParent(pt: type, mt: type, name: []const u8) !StructField {
-            
-        }
-        
         /// Must be initialized from a parent instance with compatible fields
         /// as defined in the initial env backing struct used when generating the environment
         ///
@@ -139,7 +165,7 @@ pub fn For(comptime T: type) type {
             comptime {
                 const parent_info = @typeInfo(ParentType);
 
-                switch(parent_info) {
+                switch (parent_info) {
                     .pointer => {},
                     else => @compileError("Env structs must be initialized from a valid pointer!"),
                 }
@@ -148,18 +174,18 @@ pub fn For(comptime T: type) type {
             var backing: T = undefined;
 
             inline for (Bindings.map) |*bind| {
-                const backing_field = try findMatchingFieldInBacking(bind[0], bind[1]);
-                const parent_field = try findMatchingFieldInParent(ParentType, bind[0], bind[1]);
-
+                const backing_name = bind.backing_name;
+                const parent_name = bind.parent_name;
                 // if the field is a pointer, simply copy it over to the inner struct
-                @field(backing, backing_field.name).inner = switch (@typeInfo(parent_field.type)) {
-                    .pointer => @field(val, parent_field.name),
-                    else => &@field(val, parent_field.name),
+                const pft = findParentFieldType(ParentType, parent_name);
+                @field(backing, backing_name).inner = switch (@typeInfo(pft)) {
+                    .pointer => @field(val, parent_name),
+                    else => &@field(val, parent_name),
                 };
                 // otherwise, make a reference to it in the parent (this is why a pointer must be passed)
             }
 
-            return Self {
+            return Self{
                 .inner = backing,
             };
         }

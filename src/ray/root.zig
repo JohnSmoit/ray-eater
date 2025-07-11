@@ -13,7 +13,6 @@ const descriptor = @import("api/descriptor.zig");
 pub const Context = @import("context.zig");
 pub const api = @import("api.zig");
 
-
 // WARN: Basically everything under this line will be yeeted in favor of the new context system
 // (Once it's done)
 const TexImage = @import("api/texture.zig");
