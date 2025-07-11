@@ -69,12 +69,12 @@ pub fn build(b: *std.Build) void {
     });
 
     const test_mod = b.createModule(.{
-        .root_source_file = b.path("test/test_math.zig"),
+        .root_source_file = b.path("src/test_all.zig"),
         .target = target,
         .optimize = optimize,
     });
     test_mod.addImport("ray", lib_mod);
-
+    test_mod.addImport("glfw", glfw_mod);
 
     const lib_tests = b.addTest(.{
         .root_module = test_mod,

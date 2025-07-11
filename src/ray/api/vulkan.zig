@@ -39,9 +39,16 @@ pub const ContextConfig = struct {
     },
 
     loader: GetProcAddrHandler,
-    window: *glfw.Window,
     allocator: Allocator,
     enable_debug_log: bool,
+};
+
+/// All this really helps with is easier
+/// heap allocation (y'know, reducing possible failure points from 3 to 1)
+pub const VulkanAPI = struct {
+    global_interface: vk.BaseWrapper,
+    inst_interface: vk.InstanceProxy,
+    dev_interface: vk.DeviceProxy,
 };
 
 fn debugCallback(message_severity: vk.DebugUtilsMessageSeverityFlagsEXT, message_type: vk.DebugUtilsMessageTypeFlagsEXT, p_callback_data: ?*const vk.DebugUtilsMessengerCallbackDataEXT, p_user_data: ?*anyopaque) callconv(.c) vk.Bool32 {
@@ -752,11 +759,11 @@ pub const ComputeQueue = GenericQueue(.Compute);
 
 pub const Surface = struct {
     pub const log = global_log.scoped(.surface);
-    h_window: *glfw.Window = undefined,
+    h_window: *const glfw.Window = undefined,
     h_surface: vk.SurfaceKHR = .null_handle,
     ctx: *const Context = undefined,
 
-    pub fn init(window: *glfw.Window, ctx: *const Context) !Surface {
+    pub fn init(window: *const glfw.Window, ctx: *const Context) !Surface {
         var surface: vk.SurfaceKHR = undefined;
 
         if (glfw.glfwCreateWindowSurface(ctx.pr_inst.handle, window.handle, null, &surface) != .success) {
@@ -853,19 +860,24 @@ pub const Swapchain = struct {
     fn choosePresentMode(
         available: []const vk.PresentModeKHR,
         config: *const Config,
-    ) !vk.PresentModeKHR {
+    ) vk.PresentModeKHR {
+        log.debug("Want present mode: {s}", .{@tagName(config.requested_present_mode)});
         var chosen_mode: ?vk.PresentModeKHR = null;
         for (available) |mode| {
+            log.debug("Present mode: {s}", .{@tagName(mode)});
             if (mode == config.requested_present_mode) {
                 chosen_mode = mode;
+
+                log.debug("chose present mode: {s}", .{
+                    @tagName(mode),
+                });
+
                 break;
             }
         }
 
-        log.debug("chose present mode: {s}", .{
-            @tagName(chosen_mode.?),
-        });
-        return chosen_mode orelse error.NoSuitableFormat;
+        log.debug("Chosen fallback present mode: {s}", .{@tagName(.immediate_khr)});
+        return chosen_mode orelse .immediate_khr;
     }
 
     fn createImageViews(self: *Swapchain) !void {
@@ -919,7 +931,7 @@ pub const Swapchain = struct {
             config,
         );
 
-        const present_mode = try choosePresentMode(
+        const present_mode = choosePresentMode(
             device.swapchain_details.present_modes,
             config,
         );
@@ -1059,7 +1071,7 @@ pub const FixedFunctionState = struct {
             Direct: struct { // specify fixed function viewport directly
                 viewport: vk.Viewport,
                 scissor: vk.Rect2D,
-            }
+            },
         },
         vertex_binding: vk.VertexInputBindingDescription,
         vertex_attribs: []const vk.VertexInputAttributeDescription,
