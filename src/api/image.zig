@@ -6,6 +6,7 @@ const buf = @import("buffer.zig");
 const util = @import("../util.zig");
 
 const Allocator = std.mem.Allocator;
+const Context = @import("../context.zig");
 
 const DeviceHandler = @import("base.zig").DeviceHandler;
 const GraphicsQueue = @import("queue.zig").GraphicsQueue;
@@ -279,9 +280,9 @@ fn init_self(self: *Self, dev: *const DeviceHandler, config: *const Config) !voi
     }
 }
 
-pub fn init(dev: *const DeviceHandler, config: *const Config) !Self {
+pub fn init(ctx: *const Context, config: *const Config) !Self {
     var image = Self{};
-    try image.init_self(dev, config);
+    try image.init_self(ctx.env(.dev), config);
 
     return image;
 }
@@ -289,7 +290,7 @@ pub fn init(dev: *const DeviceHandler, config: *const Config) !Self {
 /// creates a texture image and loads it from a provided file
 /// WARN: This is a shit way of differentiating images between textures and other image types
 /// Actually, this is shit in general, like this shit should be in the texture.zig like wtf
-pub fn fromFile(dev: *const DeviceHandler, path: []const u8, allocator: Allocator) !Self {
+pub fn fromFile(ctx: *const Context, allocator: Allocator, path: []const u8) !Self {
     var image_data = rsh.loadImageFile(path, allocator) catch |err| {
         log.err("Failed to load image: {!}", .{err});
         return err;
@@ -297,12 +298,12 @@ pub fn fromFile(dev: *const DeviceHandler, path: []const u8, allocator: Allocato
 
     defer image_data.deinit();
 
-    var staging_buffer = try StagingBuffer.create(dev, image_data.imageByteSize());
+    var staging_buffer = try StagingBuffer.create(ctx, image_data.imageByteSize());
 
     try staging_buffer.buffer().setData(image_data.pixels.asBytes().ptr);
     defer staging_buffer.deinit();
 
-    const image = try Self.init(dev, &.{
+    const image = try Self.init(ctx, &.{
         .format = .r8g8b8a8_srgb,
         .tiling = .optimal,
 

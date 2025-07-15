@@ -156,17 +156,17 @@ pub fn init(
 
     const surface_format = try chooseSurfaceFormat(
         device.swapchain_details.formats,
-        config,
+        &config,
     );
 
     const present_mode = choosePresentMode(
         device.swapchain_details.present_modes,
-        config,
+        &config,
     );
 
     const extent = try chooseExtent(
         &device.swapchain_details.capabilities,
-        config,
+        &config,
     );
 
     // make sure the swapchain knows about the relationship between our queue families
@@ -231,7 +231,7 @@ pub fn init(
 
     // get handles to the created images and create their associated views
     // (which has to be done AFTER the swapchain is created hence the var instead of const)
-    try chain.createImageViews(allocator);
+    try chain.createImageViews();
 
     return chain;
 }

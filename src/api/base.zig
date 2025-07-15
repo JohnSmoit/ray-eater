@@ -230,7 +230,7 @@ pub const InstanceHandler = struct {
 //TODO: Yeet into a non-owning view of context
 pub const DeviceHandler = struct {
     pub const Config = struct {
-        surface: *const Surface,
+        surface: *const SurfaceHandler,
         required_extensions: []const [*:0]const u8 = &[0][*:0]const u8{},
     };
 
@@ -264,7 +264,7 @@ pub const DeviceHandler = struct {
     /// is sort of temporary anyhoo, since DebugAllocator is obviously not the way to go in production
     pub fn getDeviceSupport(
         pr_inst: *const vk.InstanceProxy,
-        surface: *const Surface,
+        surface: *const SurfaceHandler,
         pdev: vk.PhysicalDevice, //TODO: Optional -- Will use chosen physical device info if omitted
         allocator: Allocator,
     ) !SwapchainSupportDetails {
@@ -374,7 +374,7 @@ pub const DeviceHandler = struct {
     fn getQueueFamilies(
         dev: vk.PhysicalDevice,
         pr_inst: *const vk.InstanceProxy,
-        surface: *const Surface,
+        surface: *const SurfaceHandler,
         allocator: Allocator,
     ) FamilyIndices {
         var found_indices: FamilyIndices = .{
@@ -651,13 +651,13 @@ pub const DeviceHandler = struct {
 };
 
 //TODO: Yeet
-pub const Surface = struct {
+pub const SurfaceHandler = struct {
     pub const log = std.log.scoped(.surface);
     h_window: *const glfw.Window = undefined,
     h_surface: vk.SurfaceKHR = .null_handle,
     ctx: *const InstanceHandler = undefined,
 
-    pub fn init(window: *const glfw.Window, ctx: *const InstanceHandler) !Surface {
+    pub fn init(window: *const glfw.Window, ctx: *const InstanceHandler) !SurfaceHandler {
         var surface: vk.SurfaceKHR = undefined;
 
         if (glfw.glfwCreateWindowSurface(ctx.pr_inst.handle, window.handle, null, &surface) != .success) {
@@ -665,14 +665,14 @@ pub const Surface = struct {
             return error.SurfaceCreationFailed;
         }
 
-        return Surface{
+        return SurfaceHandler{
             .h_window = window,
             .h_surface = surface,
             .ctx = ctx,
         };
     }
 
-    pub fn deinit(self: *Surface) void {
+    pub fn deinit(self: *SurfaceHandler) void {
         self.ctx.pr_inst.destroySurfaceKHR(self.h_surface, null);
     }
 };

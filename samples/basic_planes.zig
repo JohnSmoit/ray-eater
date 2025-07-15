@@ -14,7 +14,7 @@ const util = ray.util;
 const glfw = @import("glfw");
 const Window = glfw.Window;
 
-
+const Context = ray.Context;
 
 // WARN: Basically everything under this line will be yeeted in favor of the new context system
 // (Once it's done)
@@ -32,15 +32,13 @@ const vk_true = api.vk.TRUE;
 
 var external_extensions: ?[][*:0]const u8 = null;
 
-var context: api.Instance = undefined;
-var device: api.Device = undefined;
-var surface: api.Surface = undefined;
+var context: *Context = undefined;
 
 var graphics_queue: api.GraphicsQueue = undefined;
 var present_queue: api.PresentQueue = undefined;
 var swapchain: api.Swapchain = undefined;
 
-var window_handle: ?*glfw.Window = null;
+var window_handle: *glfw.Window = undefined;
 
 var renderpass: api.RenderPass = undefined;
 
@@ -58,6 +56,9 @@ const device_extensions = [_][*:0]const u8{api.extensions.khr_swapchain.name};
 var render_finished_semaphore: api.Semaphore = .null_handle;
 var image_finished_semaphore: api.Semaphore = .null_handle;
 var present_finished_fence: api.Fence = .null_handle;
+
+var dev: *const api.DeviceHandler = undefined;
+var pr_dev: *const api.DeviceInterface = undefined;
 
 const TestVertexInput = extern struct {
     position: math.Vec3,
@@ -120,35 +121,23 @@ fn init(allocator: Allocator) !void {
         api.extensions.ext_debug_utils.name,
     });
 
-    context = try api.Instance.init(&.{
+    context = try Context.init(allocator, .{
+        .inst_extensions = extensions.items,
+        .dev_extensions = device_extensions[0..],
+        .window = window_handle,
         .loader = glfw.glfwGetInstanceProcAddress,
-        .allocator = allocator,
-        .instance = .{
-            .required_extensions = @ptrCast(extensions.items[0..]),
-            .validation_layers = &validation_layers,
-        },
-        .device = undefined,
-        .enable_debug_log = true,
     });
-    errdefer context.deinit();
 
-    surface = try api.Surface.init(window_handle orelse
-        return error.NoWindowSpecified, &context);
-    errdefer surface.deinit();
+    dev = context.env(.dev);
+    pr_dev = context.env(.di);
 
-    device = try api.Device.init(&context, &.{
-        .surface = &surface,
-        .required_extensions = &device_extensions,
-    });
-    errdefer device.deinit();
-
-    graphics_queue = try api.GraphicsQueue.init(&device);
+    graphics_queue = try api.GraphicsQueue.init(context);
     errdefer graphics_queue.deinit();
 
-    present_queue = try api.PresentQueue.init(&device);
+    present_queue = try api.PresentQueue.init(context);
     errdefer present_queue.deinit();
 
-    swapchain = try api.Swapchain.init(&device, &surface, &.{
+    swapchain = try api.Swapchain.init(context, allocator, .{
         .requested_present_mode = .mailbox_khr,
         .requested_format = .{
             .color_space = .srgb_nonlinear_khr,
@@ -161,18 +150,16 @@ fn init(allocator: Allocator) !void {
     });
     errdefer swapchain.deinit();
 
-    const vert_shader_module = try api.ShaderModule.from_source_file(
-        .Vertex,
-        "shaders/shader.vert",
-        &device,
-    );
+    const vert_shader_module = try api.ShaderModule.fromSourceFile(context, allocator, .{
+        .stage = .Vertex,
+        .filename = "shaders/shader.vert",
+    });
 
     defer vert_shader_module.deinit();
-    const frag_shader_module = try api.ShaderModule.from_source_file(
-        .Fragment,
-        "shaders/shader.frag",
-        &device,
-    );
+    const frag_shader_module = try api.ShaderModule.fromSourceFile(context, allocator, .{
+        .stage = .Fragment,
+        .filename = "shaders/shader.frag",
+    });
     defer frag_shader_module.deinit();
 
     const dynamic_states = [_]api.DynamicState{
@@ -180,10 +167,10 @@ fn init(allocator: Allocator) !void {
         .scissor,
     };
 
-    test_tex = try api.TexImage.fromFile(&device, "textures/shrek.png", allocator);
+    test_tex = try api.TexImage.fromFile(context, allocator, "textures/shrek.png");
     errdefer test_tex.deinit();
 
-    uniform_buffer = try UniformBuffer.create(&device);
+    uniform_buffer = try UniformBuffer.create(context);
     errdefer uniform_buffer.buffer().deinit();
 
     var bindings = [_]api.ResolvedDescriptorBinding{
@@ -195,13 +182,13 @@ fn init(allocator: Allocator) !void {
         } },
     };
 
-    test_descriptor = try TestDescriptor.init(&device, .{
+    test_descriptor = try TestDescriptor.init(context, .{
         .bindings = &bindings,
     });
     errdefer test_descriptor.deinit();
 
     var fixed_function_state = api.FixedFunctionState{};
-    fixed_function_state.init_self(&device, &.{
+    fixed_function_state.init_self(context, &.{
         .viewport = .{ .Swapchain = &swapchain },
         .dynamic_states = &dynamic_states,
         .deez_nuts = true,
@@ -211,7 +198,7 @@ fn init(allocator: Allocator) !void {
     });
     defer fixed_function_state.deinit();
 
-    renderpass = try api.RenderPass.initAlloc(&device, &[_]api.RenderPass.ConfigEntry{
+    renderpass = try api.RenderPass.initAlloc(context, &[_]api.RenderPass.ConfigEntry{
         .{
             .attachment = .{
                 .format = swapchain.surface_format.format,
@@ -227,7 +214,7 @@ fn init(allocator: Allocator) !void {
         },
         .{
             .attachment = .{
-                .format = try device.findDepthFormat(),
+                .format = try dev.findDepthFormat(),
                 .samples = .{ .@"1_bit" = true },
                 .load_op = .clear,
                 .store_op = .dont_care,
@@ -241,17 +228,17 @@ fn init(allocator: Allocator) !void {
     }, scratch);
     errdefer renderpass.deinit();
 
-    graphics_pipeline = try api.GraphicsPipeline.init(&device, &.{
+    graphics_pipeline = try api.GraphicsPipeline.init(context, &.{
         .renderpass = &renderpass,
         .fixed_functions = &fixed_function_state,
         .shader_stages = &[_]api.ShaderModule{ vert_shader_module, frag_shader_module },
     }, scratch);
     errdefer graphics_pipeline.deinit();
 
-    depth_image = try api.DepthImage.init(&device, swapchain.extent);
+    depth_image = try api.DepthImage.init(context, swapchain.extent);
     errdefer depth_image.deinit();
 
-    framebuffers = try api.FrameBuffer.initAlloc(&device, allocator, &.{
+    framebuffers = try api.FrameBuffer.initAlloc(context, allocator, &.{
         .renderpass = &renderpass,
         .image_views = swapchain.images,
         .depth_view = depth_image.view.h_view,
@@ -265,13 +252,13 @@ fn init(allocator: Allocator) !void {
     // create a bunch of stupid synchronization objects and stuff
     // I didn't really integrate these into the wrapper structs cuz i kinda don't really
     // know where to put them
-    render_finished_semaphore = try device.pr_dev.createSemaphore(&.{}, null);
-    image_finished_semaphore = try device.pr_dev.createSemaphore(&.{}, null);
-    present_finished_fence = try device.pr_dev.createFence(&.{
+    render_finished_semaphore = try pr_dev.createSemaphore(&.{}, null);
+    image_finished_semaphore = try pr_dev.createSemaphore(&.{}, null);
+    present_finished_fence = try pr_dev.createFence(&.{
         .flags = .{ .signaled_bit = true },
     }, null);
 
-    command_buffer = try api.CommandBuffer.init(&device);
+    command_buffer = try api.CommandBuffer.init(context);
 
     const vertex_data = [_]TestVertexInput{
         .{ .position = math.vec(.{ -0.5, 0.0, -0.5 }), .color = math.vec(.{ 1.0, 0.0, 0.0 }), .uv = math.vec(.{ 1.0, 0.0 }) },
@@ -285,7 +272,7 @@ fn init(allocator: Allocator) !void {
         .{ .position = math.vec(.{ -0.5, 0.5, 0.5 }), .color = math.vec(.{ 1.0, 1.0, 1.0 }), .uv = math.vec(.{ 1.0, 1.0 }) },
     };
 
-    vertex_buffer = VertexBuffer.create(&device, vertex_data.len) catch |err| {
+    vertex_buffer = VertexBuffer.create(context, vertex_data.len) catch |err| {
         root_log.err("Failed to initialize vertex buffer: {!}", .{err});
         return err;
     };
@@ -300,7 +287,7 @@ fn init(allocator: Allocator) !void {
 
     const index_data = [_]u16{ 0, 1, 2, 2, 3, 0, 4, 5, 6, 6, 7, 4 };
 
-    index_buffer = IndexBuffer.create(&device, index_data.len) catch |err| {
+    index_buffer = IndexBuffer.create(context, index_data.len) catch |err| {
         root_log.err("Failed to initialize index buffer: {!}", .{err});
         return err;
     };
@@ -351,14 +338,14 @@ fn updateUniforms() !void {
 }
 
 fn mainLoop() !void {
-    _ = device.pr_dev.waitForFences(
+    _ = pr_dev.waitForFences(
         1,
         util.asManyPtr(api.Fence, &present_finished_fence),
         vk_true,
         std.math.maxInt(u64),
     ) catch {}; // fuck rendering errors
 
-    device.pr_dev.resetFences(
+    pr_dev.resetFences(
         1,
         util.asManyPtr(api.Fence, &present_finished_fence),
     ) catch {};
@@ -378,7 +365,7 @@ fn mainLoop() !void {
     ib_interface.bind(&command_buffer);
     test_descriptor.bind(&command_buffer, graphics_pipeline.h_pipeline_layout);
 
-    device.drawIndexed(&command_buffer, @intCast(index_buffer.buf.size), 1, 0, 0, 0);
+    dev.drawIndexed(&command_buffer, @intCast(index_buffer.buf.size), 1, 0, 0, 0);
 
     renderpass.end(&command_buffer);
 
@@ -399,13 +386,13 @@ fn mainLoop() !void {
 }
 
 fn deinit() void {
-    device.waitIdle() catch {
+    dev.waitIdle() catch {
         root_log.err("Failed to wait on device", .{});
     };
     // destroy synchronization objects
-    device.pr_dev.destroySemaphore(render_finished_semaphore, null);
-    device.pr_dev.destroySemaphore(image_finished_semaphore, null);
-    device.pr_dev.destroyFence(present_finished_fence, null);
+    dev.pr_dev.destroySemaphore(render_finished_semaphore, null);
+    dev.pr_dev.destroySemaphore(image_finished_semaphore, null);
+    dev.pr_dev.destroyFence(present_finished_fence, null);
 
     test_tex.deinit();
 
@@ -422,12 +409,8 @@ fn deinit() void {
     swapchain.deinit();
     graphics_queue.deinit();
     present_queue.deinit();
-    surface.deinit();
-    device.deinit();
     context.deinit();
 }
-
-
 
 pub fn main() !void {
     var window = try helpers.makeBasicWindow(900, 600, "Test Window");

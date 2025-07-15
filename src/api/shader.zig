@@ -3,8 +3,9 @@ const rshc = @import("rshc");
 
 const vk = @import("vulkan");
 
-
 pub const Stage = rshc.Stage;
+pub const Context = @import("../context.zig");
+const Allocator = std.mem.Allocator;
 
 const log = std.log.scoped(.shader);
 
@@ -18,21 +19,29 @@ pub fn toShaderStageFlags(stage: Stage) vk.ShaderStageFlags {
 }
 
 pub const Module = struct {
+    pub const Config = struct {
+        stage: Stage,
+        filename: []const u8,
+    };
+
     module: vk.ShaderModule = .null_handle,
     pipeline_info: vk.PipelineShaderStageCreateInfo = undefined,
     pr_dev: *const vk.DeviceProxy = undefined,
 
-    pub fn from_source_file(stage: Stage, filename: []const u8, dev: *const DeviceHandler) !Module {
-        var arena = std.heap.ArenaAllocator.init(dev.ctx.allocator);
-        
-        // Arena's deinit always frees all allocated memory, so no need
-        // to worry about indiviudal allocations
-        defer arena.deinit(); 
+    pub fn fromSourceFile(
+        ctx: *const Context,
+        alloc: Allocator,
+        config: Config,
+    ) !Module {
+        const dev: *const DeviceHandler = ctx.env(.dev);
+        var arena = std.heap.ArenaAllocator.init(alloc);
+
+        defer arena.deinit();
         const allocator = arena.allocator();
 
         const compilation_result = rshc.compileShaderAlloc(
-            filename,
-            stage,
+            config.filename,
+            config.stage,
             allocator,
         );
 
@@ -56,13 +65,13 @@ pub const Module = struct {
             .p_code = @alignCast(@ptrCast(compiled_bytes.ptr)),
         }, null);
 
-        const pipeline_info = vk.PipelineShaderStageCreateInfo {
-            .stage = toShaderStageFlags(stage),
+        const pipeline_info = vk.PipelineShaderStageCreateInfo{
+            .stage = toShaderStageFlags(config.stage),
             .module = module,
-            .p_name  = "main",
+            .p_name = "main",
         };
 
-        return Module {
+        return Module{
             .module = module,
             .pipeline_info = pipeline_info,
             .pr_dev = &dev.pr_dev,

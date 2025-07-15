@@ -8,9 +8,9 @@ const e = @import("env.zig");
 const Allocator = std.mem.Allocator;
 const ExtensionNameList = std.ArrayList([*:0]const u8);
 
-const Device = api.Device;
-const Instance = api.Instance;
-const Surface = api.Surface;
+const Device = api.DeviceHandler;
+const Instance = api.InstanceHandler;
+const Surface = api.SurfaceHandler;
 
 const GlobalInterface = api.GlobalInterface;
 const InstanceInterface = api.InstanceInterface;

@@ -4,6 +4,7 @@ const vk = @import("vulkan");
 const Allocator = std.mem.Allocator;
 const Image = @import("image.zig");
 const DeviceHandler = @import("base.zig").DeviceHandler;
+const Context = @import("../context.zig");
 
 const Self = @This();
 
@@ -48,8 +49,17 @@ fn initSampler(self: *Self) !void {
     }, null);
 }
 
-pub fn fromFile(dev: *const DeviceHandler, filename: []const u8, allocator: Allocator) !Self {
-    const image = try Image.fromFile(dev, filename, allocator);
+pub fn fromFile(
+    ctx: *const Context,
+    allocator: Allocator,
+    filename: []const u8,
+) !Self {
+    const dev = ctx.env(.dev);
+    const image = try Image.fromFile(
+        ctx,
+        allocator,
+        filename,
+    );
     const view = try image.createView(.{ .color_bit = true });
 
     var tex = Self{

@@ -8,6 +8,7 @@ const util = @import("../util.zig");
 
 const CommandBuffer = @import("command_buffer.zig");
 const DeviceHandler = @import("base.zig").DeviceHandler;
+const Context = @import("../context.zig");
 
 const TypeInfo = std.builtin.Type;
 const StructInfo = std.builtin.Type.Struct;
@@ -134,7 +135,8 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
         ///
         /// For now, I just do the memory compatibility checks here every time set is called
         /// so beware!
-        pub fn create(dev: *const DeviceHandler, size: usize) !Self {
+        pub fn create(ctx: *const Context, size: usize) !Self {
+            const dev = ctx.env(.dev);
             var buf = Self{
                 .h_buf = try dev.pr_dev.createBuffer(&.{
                     .size = size * element_size,

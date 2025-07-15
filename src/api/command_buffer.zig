@@ -19,6 +19,10 @@ one_shot: bool = false,
 
 pub fn init(ctx: *const Context) !Self {
     const dev = ctx.env(.dev);
+    return init_dev(dev);
+}
+
+fn init_dev(dev: *const DeviceHandler) !Self {
     var cmd_buffer: vk.CommandBuffer = undefined;
     dev.pr_dev.allocateCommandBuffers(
         &.{
@@ -37,10 +41,11 @@ pub fn init(ctx: *const Context) !Self {
         .h_cmd_pool = dev.h_cmd_pool,
         .dev = dev,
     };
+
 }
 
 pub fn oneShot(dev: *const DeviceHandler) !Self {
-    var buf = try init(dev);
+    var buf = try init_dev(dev);
     buf.one_shot = true;
 
     try buf.beginConfig(.{ .one_time_submit_bit = true });
@@ -72,8 +77,11 @@ pub fn end(self: *const Self) !void {
     // Also, synchronization is not gonna be handled yet...
     // the best way to handle synchronization is to only do 1 thing at a time 😊
     // (by waiting idle)
+    
+    // We need queue handles from the context straight up, no way around it ugh
+    // this shit is too bad to handle otherwise
     if (self.one_shot) {
-        const submit_queue = try GraphicsQueue.init(self.dev);
+        const submit_queue = try GraphicsQueue.init(self.ctx);
         try submit_queue.submit(self, null, null, null);
         submit_queue.waitIdle();
     }
