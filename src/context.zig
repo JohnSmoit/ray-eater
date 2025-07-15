@@ -1,5 +1,5 @@
 const std = @import("std");
-const api = @import("api.zig");
+const api = @import("api/api.zig");
 
 const glfw = @import("glfw");
 
@@ -18,15 +18,16 @@ const DeviceInterface = api.DeviceInterface;
 const VulkanAPI = api.VulkanAPI;
 
 const Ref = e.Ref;
-const ContextEnv = struct {
+const EnvBacking = struct {
     inst: Ref(Instance, .{}),
     dev: Ref(Device, .{}),
+    surf: Ref(Surface, .{}),
 
     gi: Ref(GlobalInterface, .{ .field = "global_interface" }),
     ii: Ref(InstanceInterface, .{ .field = "inst_interface" }),
     di: Ref(DeviceInterface, .{ .field = "dev_interface" }),
 };
-const Environment = e.For(ContextEnv);
+const Environment = e.For(EnvBacking);
 
 const Self = @This();
 
@@ -49,7 +50,6 @@ allocator: Allocator,
 fn ResolveEnvType(comptime field: anytype) type {
     return switch (@TypeOf(field)) {
         void => *const Environment,
-
         else => Environment.ResolveInner(@as(Environment.ContextEnum, field)),
     };
 }
@@ -72,7 +72,7 @@ fn ResolveEnvType(comptime field: anytype) type {
 /// 
 /// ## Usage Tips:
 /// * I STRONGLY recommend using manual type annotation if you want any hints from ZLS whatsoever
-///   because it doesn't really handle the comptime stuff fully yet on its own.
+///   because zls doesn't really handle comptime stuff very well yet.
 pub fn env(self: *const Self, comptime field: anytype) ResolveEnvType(field) {
     const Res = ResolveEnvType(field);
 

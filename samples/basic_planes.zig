@@ -72,11 +72,10 @@ const TestUniforms = extern struct {
 };
 
 const UniformBuffer = api.ComptimeUniformBuffer(TestUniforms);
-
-var test_uniforms: TestUniforms = undefined;
-
 const VertexBuffer = api.ComptimeVertexBuffer(TestVertexInput);
 const IndexBuffer = api.ComptimeIndexBuffer(u16);
+
+var test_uniforms: TestUniforms = undefined;
 
 var vertex_buffer: VertexBuffer = undefined;
 var index_buffer: IndexBuffer = undefined;
@@ -94,10 +93,9 @@ const TestDescriptor = api.ComptimeDescriptor(
         .type = .Sampler,
     } },
 );
+
 var test_descriptor: TestDescriptor = undefined;
-
 var test_tex: api.TexImage = undefined;
-
 
 fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
     glfw_log.err("error code {d} -- Message: {s}", .{ code, desc });
@@ -163,7 +161,6 @@ fn init(allocator: Allocator) !void {
     });
     errdefer swapchain.deinit();
 
-    // test create shader modules and stuff
     const vert_shader_module = try api.ShaderModule.from_source_file(
         .Vertex,
         "shaders/shader.vert",
@@ -178,7 +175,6 @@ fn init(allocator: Allocator) !void {
     );
     defer frag_shader_module.deinit();
 
-    // test create fixed function pipeline state
     const dynamic_states = [_]api.DynamicState{
         .viewport,
         .scissor,
@@ -214,8 +210,6 @@ fn init(allocator: Allocator) !void {
         .descriptors = &[_]api.vk.DescriptorSetLayout{test_descriptor.h_desc_layout},
     });
     defer fixed_function_state.deinit();
-
-    // test create render pass state and stuff i guess
 
     renderpass = try api.RenderPass.initAlloc(&device, &[_]api.RenderPass.ConfigEntry{
         .{
@@ -279,7 +273,6 @@ fn init(allocator: Allocator) !void {
 
     command_buffer = try api.CommandBuffer.init(&device);
 
-    // test vertex data and stuff
     const vertex_data = [_]TestVertexInput{
         .{ .position = math.vec(.{ -0.5, 0.0, -0.5 }), .color = math.vec(.{ 1.0, 0.0, 0.0 }), .uv = math.vec(.{ 1.0, 0.0 }) },
         .{ .position = math.vec(.{ 0.5, 0.0, -0.5 }), .color = math.vec(.{ 0.0, 1.0, 0.0 }), .uv = math.vec(.{ 0.0, 0.0 }) },
@@ -297,9 +290,6 @@ fn init(allocator: Allocator) !void {
         return err;
     };
 
-    // FIXME: Interface casting shouldn't be required to use basic member functions lol
-    // This literally sucks ass I don't care how cursed the implementation is,
-    // it should not require this
     vb_interface = vertex_buffer.buffer();
     errdefer vb_interface.deinit();
 
@@ -337,20 +327,6 @@ fn init(allocator: Allocator) !void {
             math.Vec3.global_up,
         ),
     };
-
-    // test_uniforms = .{
-    //     .model = math.Mat4.rotateZ(, math.radians(45.0)),
-    //     .projection = math.zlm.Mat4.createPerspective(
-    //         math.radians(45.0),
-    //         600.0 / 900.0,
-    //         0.1,
-    //         30.0,
-    //     ),
-    //     .view = math.zlm.Mat4.createLookAt(math.zlm.vec3(2.0, 2.0, 2.0), math.zlm.vec3(0, 0, 0), math.zlm.Vec3.unitY),
-    // };
-    //
-
-    // create test textures and stuff I guess
 }
 
 fn updateUniforms() !void {
@@ -370,17 +346,6 @@ fn updateUniforms() !void {
             math.Vec3.global_up,
         ),
     };
-
-    // test_uniforms = .{
-    //     .model = math.zlm.Mat4.createAngleAxis(math.zlm.Vec3.unitY, math.radians(45.0) * @as(f32, @floatCast(glfw.getTime()))),
-    //     .projection = math.zlm.Mat4.createPerspective(
-    //         math.radians(45.0),
-    //         600.0 / 900.0,
-    //         0.1,
-    //         30.0,
-    //     ),
-    //     .view = math.zlm.Mat4.createLookAt(math.zlm.vec3(2.0, 2.0, 2.0), math.zlm.vec3(0, 0, 0), math.zlm.Vec3.unitY),
-    // };
 
     try test_descriptor.update(0, &test_uniforms);
 }
