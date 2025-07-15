@@ -1,10 +1,9 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const api = @import("vulkan.zig");
 
 const Allocator = std.mem.Allocator;
 const Image = @import("image.zig");
-const Device = api.Device;
+const DeviceHandler = @import("base.zig").DeviceHandler;
 
 const Self = @This();
 
@@ -13,7 +12,7 @@ view: Image.View = undefined,
 
 h_sampler: vk.Sampler = .null_handle,
 
-dev: *const Device = undefined,
+dev: *const DeviceHandler = undefined,
 
 fn initSampler(self: *Self) !void {
     const max_aniso = self.dev.props.limits.max_sampler_anisotropy;
@@ -49,7 +48,7 @@ fn initSampler(self: *Self) !void {
     }, null);
 }
 
-pub fn fromFile(dev: *const Device, filename: []const u8, allocator: Allocator) !Self {
+pub fn fromFile(dev: *const DeviceHandler, filename: []const u8, allocator: Allocator) !Self {
     const image = try Image.fromFile(dev, filename, allocator);
     const view = try image.createView(.{ .color_bit = true });
 

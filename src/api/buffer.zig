@@ -1,11 +1,13 @@
 const vk = @import("vulkan");
 
 const std = @import("std");
-const api = @import("vulkan.zig");
 
 const log = std.log.scoped(.buffer);
 const meth = @import("../math.zig");
 const util = @import("../util.zig");
+
+const CommandBuffer = @import("command_buffer.zig");
+const DeviceHandler = @import("base.zig").DeviceHandler;
 
 const TypeInfo = std.builtin.Type;
 const StructInfo = std.builtin.Type.Struct;
@@ -17,12 +19,12 @@ pub const Config = struct {
     memory: vk.MemoryPropertyFlags = .{},
 };
 
-const BindFn =  *const (fn (*anyopaque, *const api.CommandBufferSet) void);
+const BindFn =  *const (fn (*anyopaque, *const CommandBuffer) void);
 const SetDataFn = *const (fn (*anyopaque, *const anyopaque) anyerror!void);
 const DeinitFn = *const (fn (*anyopaque) void);
 
 const VTable = struct {
-    bind: *const (fn (*anyopaque, *const api.CommandBufferSet) void) = undefined,
+    bind: *const (fn (*anyopaque, *const CommandBuffer) void) = undefined,
 
     // this is kinda gross, maybe consider something other than type erasing here...
     setData: *const (fn (*anyopaque, *const anyopaque) anyerror!void) = undefined,
@@ -46,7 +48,7 @@ pub const AnyBuffer = struct {
     cfg: *const Config,
     vtable: *const VTable,
 
-    pub fn bind(self: AnyBuffer, cmd_buf: *const api.CommandBufferSet) void {
+    pub fn bind(self: AnyBuffer, cmd_buf: *const CommandBuffer) void {
         self.vtable.bind(self.ptr, cmd_buf);
     }
 
@@ -74,11 +76,11 @@ pub fn DeinitMixin() DeinitFn {
 
 }
 
-pub fn copy(src: AnyBuffer, dst: AnyBuffer, dev: *const api.Device) !void {
+pub fn copy(src: AnyBuffer, dst: AnyBuffer, dev: *const DeviceHandler) !void {
     assert(src.cfg.usage.contains(.{ .transfer_src_bit = true }));
     assert(dst.cfg.usage.contains(.{ .transfer_dst_bit = true }));
 
-    const transfer_cmds = try api.CommandBufferSet.oneShot(dev);
+    const transfer_cmds = try CommandBuffer.oneShot(dev);
     defer transfer_cmds.deinit();
 
     dev.pr_dev.cmdCopyBuffer(
@@ -124,7 +126,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
         h_buf: vk.Buffer = .null_handle,
         h_mem: ?vk.DeviceMemory = null,
         size: usize = 0,
-        dev: *const api.Device = undefined,
+        dev: *const DeviceHandler = undefined,
 
         /// NOTE: This function allocates memory, but since the memory used for buffers
         /// is not neccesarily normal heap memory, I need to do some reasearch how/whether
@@ -132,7 +134,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
         ///
         /// For now, I just do the memory compatibility checks here every time set is called
         /// so beware!
-        pub fn create(dev: *const api.Device, size: usize) !Self {
+        pub fn create(dev: *const DeviceHandler, size: usize) !Self {
             var buf = Self{
                 .h_buf = try dev.pr_dev.createBuffer(&.{
                     .size = size * element_size,
@@ -154,7 +156,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             return element_size * self.size;
         }
 
-        pub fn allocateMemory(dev: *const api.Device, h_buf: vk.Buffer) !vk.DeviceMemory {
+        pub fn allocateMemory(dev: *const DeviceHandler, h_buf: vk.Buffer) !vk.DeviceMemory {
             const pr_dev = &dev.pr_dev;
 
             const mem_reqs = pr_dev.getBufferMemoryRequirements(h_buf);
@@ -219,7 +221,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             assert(config.usage.contains(.{ .transfer_src_bit = true }));
             assert(dest.config.usage.contains(.{ .transfer_dst_bit = true }));
 
-            const transfer_cmds = try api.CommandBufferSet.oneShot(self.dev);
+            const transfer_cmds = try CommandBuffer.oneShot(self.dev);
             defer transfer_cmds.deinit();
 
             self.dev.pr_dev.cmdCopyBuffer(

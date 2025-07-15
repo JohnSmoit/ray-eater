@@ -1,7 +1,9 @@
 //! Type for uniform buffers
 
 const buffer = @import("buffer.zig");
-const api = @import("vulkan.zig");
+
+const DeviceHandler = @import("base.zig").DeviceHandler;
+const CommandBuffer = @import("command_buffer.zig");
 
 const AnyBuffer = buffer.AnyBuffer;
 const GenericBuffer = buffer.GenericBuffer;
@@ -21,7 +23,7 @@ pub fn UniformBuffer(T: type) type {
         buf: InnerBuffer,
         mem: []T,
 
-        pub fn create(dev: *const api.Device) !Self {
+        pub fn create(dev: *const DeviceHandler) !Self {
             var buf = try InnerBuffer.create(dev, 1);
             errdefer buf.deinit(); // conditionally deinits allocated memory if it exists
 
@@ -31,7 +33,7 @@ pub fn UniformBuffer(T: type) type {
             return Self{ .mem = mem, .buf = buf };
         }
 
-        pub fn bind(ctx: *anyopaque, cmd_buf: *const api.CommandBufferSet) void {
+        pub fn bind(ctx: *anyopaque, cmd_buf: *const CommandBuffer) void {
             // No-Op
 
             _ =  ctx;

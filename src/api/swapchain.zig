@@ -1,12 +1,12 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const util = @import("../util.zig");
+const base = @import("base.zig");
 
 const Context = @import("../context.zig");
+const DeviceHandler = base.DeviceHandler;
+const SurfaceHandler = base.SurfaceHandler;
 
-// Since the idea is to completely get rid of vulkan.zig, let's keep this nice and gross :)
-const DeviceHandler = @import("vulkan.zig").Device;
-const Surface = @import("vulkan.zig").Surface;
 const Allocator = std.mem.Allocator;
 
 const Self = @This();
@@ -144,7 +144,7 @@ pub fn init(
     // draw surface.
     const device: *const DeviceHandler = ctx.env(.dev);
     const pr_dev: *const vk.DeviceProxy = ctx.env(.di);
-    const surface: *const Surface = ctx.env(.surf);
+    const surface: *const SurfaceHandler = ctx.env(.surf);
 
     const details: *const DeviceHandler.SwapchainSupportDetails = &device.swapchain_details;
 

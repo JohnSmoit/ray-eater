@@ -3,7 +3,6 @@
 const std = @import("std");
 
 const vk = @import("vulkan");
-const api = @import("vulkan.zig");
 const util = @import("../util.zig");
 const uniform = @import("uniform.zig");
 const buffer = @import("buffer.zig");
@@ -12,9 +11,9 @@ const many = util.asManyPtr;
 
 const Allocator = std.mem.Allocator;
 
-const Device = api.Device;
+const DeviceHandler = @import("base.zig").DeviceHandler;
 const UniformBuffer = uniform.UniformBuffer;
-const CommandBufferSet = api.CommandBufferSet;
+const CommandBuffer = @import("command_buffer.zig");
 
 const AnyBuffer = buffer.AnyBuffer;
 
@@ -95,7 +94,7 @@ pub fn GenericDescriptor(comptime bind_info: []const LayoutBindings) type {
 
         fn updateDescriptorSets(
             self: *Self,
-            dev: *const Device,
+            dev: *const DeviceHandler,
             bindings: []ResolvedBinding,
             desc_set: vk.DescriptorSet,
         ) void {
@@ -151,7 +150,7 @@ pub fn GenericDescriptor(comptime bind_info: []const LayoutBindings) type {
             );
         }
 
-        pub fn init(dev: *const Device, config: Config) !Self {
+        pub fn init(dev: *const DeviceHandler, config: Config) !Self {
             if (config.bindings.len < num_bindings) {
                 return error.InvalidBindings;
             }
@@ -192,7 +191,7 @@ pub fn GenericDescriptor(comptime bind_info: []const LayoutBindings) type {
             return descriptor;
         }
 
-        pub fn bind(self: *const Self, cmd_buf: *const CommandBufferSet, layout: vk.PipelineLayout) void {
+        pub fn bind(self: *const Self, cmd_buf: *const CommandBuffer, layout: vk.PipelineLayout) void {
             self.pr_dev.cmdBindDescriptorSets(
                 cmd_buf.h_cmd_buffer,
                 .graphics,

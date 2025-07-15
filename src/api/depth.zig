@@ -1,10 +1,9 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const api = @import("vulkan.zig");
 
 const Image = @import("image.zig");
 const ImageView = Image.View;
-const Device = api.Device;
+const DeviceHandler = @import("base.zig").DeviceHandler;
 
 const Self = @This();
 
@@ -12,9 +11,9 @@ const log = std.log.scoped(.depth_buffer);
 
 img: Image,
 view: ImageView,
-dev: *const Device,
+dev: *const DeviceHandler,
 
-pub fn init(dev: *const Device, dimensions: vk.Extent2D) !Self {
+pub fn init(dev: *const DeviceHandler, dimensions: vk.Extent2D) !Self {
     log.debug("Chosen depth format: {s}", .{@tagName(try dev.findDepthFormat())});
     const image = try Image.init(dev, &.{
         .format = try dev.findDepthFormat(),

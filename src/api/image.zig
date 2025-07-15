@@ -2,15 +2,16 @@ const std = @import("std");
 const vk = @import("vulkan");
 const rsh = @import("rshc");
 
-const api = @import("vulkan.zig");
 const buf = @import("buffer.zig");
 const util = @import("../util.zig");
 
 const Allocator = std.mem.Allocator;
 
-const CommandBufferSet = api.CommandBufferSet;
-const Device = api.Device;
-const GraphicsQueue = api.GraphicsQueue;
+const DeviceHandler = @import("base.zig").DeviceHandler;
+const GraphicsQueue = @import("queue.zig").GraphicsQueue;
+
+const CommandBuffer = @import("command_buffer.zig");
+
 const StagingBuffer = buf.GenericBuffer(u8, .{
     .usage = .{ .transfer_src_bit = true },
     .memory = .{
@@ -37,7 +38,7 @@ pub const View = struct {
 h_img: vk.Image = .null_handle,
 h_mem: vk.DeviceMemory = .null_handle,
 
-dev: *const Device = undefined,
+dev: *const DeviceHandler = undefined,
 
 format: vk.Format = .undefined,
 
@@ -55,7 +56,7 @@ pub const Config = struct {
 // NOTE: Yet another instance of a BAD function that allocates device memory in a non-zig like fashion
 // -- memory allocator for device memory coming soon!
 fn createImageMemory(
-    dev: *const Device,
+    dev: *const DeviceHandler,
     img: vk.Image,
     flags: vk.MemoryPropertyFlags,
 ) !vk.DeviceMemory {
@@ -111,7 +112,7 @@ pub fn transitionLayout(
     from: vk.ImageLayout,
     to: vk.ImageLayout,
 ) !void {
-    const transition_cmds = try CommandBufferSet.oneShot(self.dev);
+    const transition_cmds = try CommandBuffer.oneShot(self.dev);
     defer transition_cmds.deinit();
 
     var transition_barrier = vk.ImageMemoryBarrier{
@@ -191,7 +192,7 @@ pub fn transitionLayout(
 }
 
 fn copyFromStaging(self: *Self, staging_buf: *StagingBuffer, extent: vk.Extent3D) !void {
-    const copy_cmds = try CommandBufferSet.oneShot(self.dev);
+    const copy_cmds = try CommandBuffer.oneShot(self.dev);
 
     self.dev.pr_dev.cmdCopyBufferToImage(
         copy_cmds.h_cmd_buffer,
@@ -222,7 +223,7 @@ fn copyFromStaging(self: *Self, staging_buf: *StagingBuffer, extent: vk.Extent3D
     };
 }
 
-fn init_self(self: *Self, dev: *const Device, config: *const Config) !void {
+fn init_self(self: *Self, dev: *const DeviceHandler, config: *const Config) !void {
     const image_info = vk.ImageCreateInfo{
         .image_type = .@"2d",
         .extent = .{
@@ -278,7 +279,7 @@ fn init_self(self: *Self, dev: *const Device, config: *const Config) !void {
     }
 }
 
-pub fn init(dev: *const Device, config: *const Config) !Self {
+pub fn init(dev: *const DeviceHandler, config: *const Config) !Self {
     var image = Self{};
     try image.init_self(dev, config);
 
@@ -288,7 +289,7 @@ pub fn init(dev: *const Device, config: *const Config) !Self {
 /// creates a texture image and loads it from a provided file
 /// WARN: This is a shit way of differentiating images between textures and other image types
 /// Actually, this is shit in general, like this shit should be in the texture.zig like wtf
-pub fn fromFile(dev: *const Device, path: []const u8, allocator: Allocator) !Self {
+pub fn fromFile(dev: *const DeviceHandler, path: []const u8, allocator: Allocator) !Self {
     var image_data = rsh.loadImageFile(path, allocator) catch |err| {
         log.err("Failed to load image: {!}", .{err});
         return err;

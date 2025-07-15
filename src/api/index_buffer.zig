@@ -1,10 +1,9 @@
 const vk = @import("vulkan");
 const buf = @import("buffer.zig");
-const api = @import("vulkan.zig");
 
 const GenericBuffer = buf.GenericBuffer;
-const CommandBufferSet = api.CommandBufferSet;
-const Device = api.Device;
+const CommandBuffer = @import("command_buffer.zig");
+const DeviceHandler = @import("base.zig").DeviceHandler;
 const AnyBuffer = buf.AnyBuffer;
 
 fn getIndexType(T: type) vk.IndexType {
@@ -29,7 +28,7 @@ pub fn IndexBuffer(T: type) type {
 
         buf: Inner,
 
-        pub fn create(dev: *const Device, size: usize) !Self {
+        pub fn create(dev: *const DeviceHandler, size: usize) !Self {
             const buff = try Inner.create(dev, size);
 
             return .{
@@ -57,7 +56,7 @@ pub fn IndexBuffer(T: type) type {
             self.buf.deinit();
         }
 
-        pub fn bind(ctx: *anyopaque, cmd_buf: *const CommandBufferSet) void {
+        pub fn bind(ctx: *anyopaque, cmd_buf: *const CommandBuffer) void {
             const self: *Self = @ptrCast(@alignCast(ctx));
             self.buf.dev.pr_dev.cmdBindIndexBuffer(cmd_buf.h_cmd_buffer, self.buf.h_buf, 0, index_type);
         }

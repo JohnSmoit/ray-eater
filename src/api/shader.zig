@@ -3,11 +3,12 @@ const rshc = @import("rshc");
 
 const vk = @import("vulkan");
 
-const api = @import("vulkan.zig");
 
 pub const Stage = rshc.Stage;
 
 const log = std.log.scoped(.shader);
+
+const DeviceHandler = @import("base.zig").DeviceHandler;
 
 pub fn toShaderStageFlags(stage: Stage) vk.ShaderStageFlags {
     return switch (stage) {
@@ -21,7 +22,7 @@ pub const Module = struct {
     pipeline_info: vk.PipelineShaderStageCreateInfo = undefined,
     pr_dev: *const vk.DeviceProxy = undefined,
 
-    pub fn from_source_file(stage: Stage, filename: []const u8, dev: *const api.Device) !Module {
+    pub fn from_source_file(stage: Stage, filename: []const u8, dev: *const DeviceHandler) !Module {
         var arena = std.heap.ArenaAllocator.init(dev.ctx.allocator);
         
         // Arena's deinit always frees all allocated memory, so no need

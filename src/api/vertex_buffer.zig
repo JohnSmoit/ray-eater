@@ -7,15 +7,14 @@ const vk = @import("vulkan");
 const meth = @import("../math.zig");
 const util = @import("../util.zig");
 const buf = @import("buffer.zig");
-const api = @import("vulkan.zig");
 
 const Layout = union(enum) {
     Struct: StructInfo,
     Int: TypeInfo.Int,
 };
 
-const Device = api.Device;
-const CommandBufferSet = api.CommandBufferSet;
+const DeviceHandler = @import("base.zig");
+const CommandBuffer = @import("command_buffer.zig");
 const AnyBuffer = buf.AnyBuffer;
 
 fn validateType(comptime T: type) Layout {
@@ -98,7 +97,7 @@ pub fn VertexBuffer(T: type) type {
 
         buf: Inner,
 
-        pub fn create(dev: *const Device, size: usize) !Self {
+        pub fn create(dev: *const DeviceHandler, size: usize) !Self {
             const buff = try Inner.create(dev, size);
 
             return .{
@@ -121,7 +120,7 @@ pub fn VertexBuffer(T: type) type {
             try buf.copy(staging.buffer(), self.buffer(), self.buf.dev);
         }
 
-        pub fn bind(ctx: *anyopaque, cmd_buf: *const CommandBufferSet) void {
+        pub fn bind(ctx: *anyopaque, cmd_buf: *const CommandBuffer) void {
             const self: *Self = @ptrCast(@alignCast(ctx));
             self.buf.dev.pr_dev.cmdBindVertexBuffers(
                 cmd_buf.h_cmd_buffer,
