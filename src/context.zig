@@ -36,15 +36,6 @@ inst: Instance,
 dev: Device,
 surf: Surface,
 
-// NOTE: For loading vulkan APIs it might be a good idea to heap-allocate those due to the fact
-// they are thicc as hell (DeviceInterface is like 6kb of straight function pointers)
-// and as such passing them around on the stack might suck
-
-// these can be assigned as pointers into the vk_api field
-// validity won't be a problem if the API is heap allocated, which I think is a fair compromise
-// in this case
-// these'll become valid once initialization is fully complete for instances
-// and devices, until that happens they just point to uninitialized heap memory
 global_interface: *const GlobalInterface,
 inst_interface: *const InstanceInterface,
 dev_interface: *const DeviceInterface,
@@ -78,6 +69,10 @@ fn ResolveEnvType(comptime field: anytype) type {
 ///
 /// ## Extras
 /// * void -> entire environment (useful for scoping in API types)
+/// 
+/// ## Usage Tips:
+/// * I STRONGLY recommend using manual type annotation if you want any hints from ZLS whatsoever
+///   because it doesn't really handle the comptime stuff fully yet on its own.
 pub fn env(self: *const Self, comptime field: anytype) ResolveEnvType(field) {
     const Res = ResolveEnvType(field);
 

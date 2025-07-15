@@ -1,4 +1,4 @@
-const vk = @import("vulkan");
+pub const vk = @import("vulkan");
 
 const vkb = @import("api/vulkan.zig");
 const buf = @import("api/buffer.zig");
@@ -12,6 +12,9 @@ const vert_buf = @import("api/vertex_buffer.zig");
 pub const GlobalInterface = vk.BaseWrapper;
 pub const InstanceInterface = vk.InstanceProxy;
 pub const DeviceInterface = vk.DeviceProxy;
+pub const Semaphore = vk.Semaphore;
+pub const Fence = vk.Fence;
+pub const DynamicState = vk.DynamicState;
 
 /// All registered extensions for devices and instances
 pub const extensions = vk.extensions;
@@ -26,10 +29,11 @@ pub const Swapchain = vkb.Swapchain;
 pub const GraphicsQueue = vkb.GraphicsQueue;
 pub const ComputeQueue = vkb.ComputeQueue;
 pub const PresentQueue = vkb.PresentQueue;
-pub const Framebuffer = vkb.FrameBufferSet;
+pub const FrameBuffer = vkb.FrameBufferSet;
 pub const GraphicsPipeline = vkb.GraphicsPipeline;
 pub const RenderPass = vkb.RenderPass;
 pub const CommandBuffer = vkb.CommandBufferSet;
+pub const FixedFunctionState = vkb.FixedFunctionState;
 
 // vulkan images (textures, depth images, and generic images)
 pub const Image = @import("api/image.zig");
@@ -39,8 +43,12 @@ pub const TexImage = @import("api/texture.zig");
 // buffers and descriptors
 pub const ComptimeVertexBuffer = vert_buf.VertexBuffer;
 pub const ComptimeIndexBuffer = ind_buf.IndexBuffer;
-pub const ComptimeUniformbuffer = uni_buf.UniformBuffer;
+pub const ComptimeUniformBuffer = uni_buf.UniformBuffer;
+pub const BufInterface = buf.AnyBuffer;
+
 pub const ComptimeDescriptor = desc.GenericDescriptor;
+pub const DescriptorBinding = desc.LayoutBindings;
+pub const ResolvedDescriptorBinding = desc.ResolvedBinding;
 
 // shaders
-pub const Shader = sh.Module;
+pub const ShaderModule = sh.Module;

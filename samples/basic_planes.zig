@@ -1,105 +1,92 @@
-//! By convention, root.zig is the root source file when making a library. If
-//! you are making an executable, the convention is to delete this file and
-//! start with main.zig instead.
+//! This application demonstrates a basic application
+//! using the provided vulkan wrappers to do some basic polygon rendering with
+//! textures and some basic shader work.
+
 const std = @import("std");
-const vk_api = @import("api/vulkan.zig");
-const util = @import("util.zig");
 
-const shader = @import("api/shader.zig");
-const buffer = @import("api/buffer.zig");
-pub const meth = @import("math.zig");
-const descriptor = @import("api/descriptor.zig");
+const ray = @import("ray");
+const math = ray.math;
+const api = ray.api;
 
-pub const Context = @import("context.zig");
-pub const api = @import("api.zig");
+const helpers = @import("common/helpers.zig");
+const util = ray.util;
+
+const glfw = @import("glfw");
+const Window = glfw.Window;
+
+
 
 // WARN: Basically everything under this line will be yeeted in favor of the new context system
 // (Once it's done)
-const TexImage = @import("api/texture.zig");
-const DepthImage = @import("api/depth.zig");
-
-const vb = @import("api/vertex_buffer.zig");
-const ib = @import("api/index_buffer.zig");
-const ub = @import("api/uniform.zig");
-
-// Another nasty import to keep extension names intact
-const vk = @import("vulkan");
-const glfw = @import("glfw");
-
-// NOTE: Temporary disgusting type exports in favor of slapping something together quicky
-// please provide a custom loader function ASAP
-pub const VkInstance = vk_api.VkInstance;
-pub const VkPfnVoidFunction = vk_api.VkPfnVoidFunction;
 
 const Allocator = std.mem.Allocator;
-
-// use a bunch of bullshit global state to test VkInstance creation
-pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0]const u8) callconv(.c) vk.PfnVoidFunction);
 
 const root_log = std.log.scoped(.root);
 const glfw_log = std.log.scoped(.glfw);
 
-// vulkan loader function (i.e glfwGetProcAddress) in charge of finding vulkan API symbols in the first place
-// (since all linking is of the runtime dynamic variety)
+const vk_true = api.vk.TRUE;
+
+// **************************************
+// =============VULKAN STATE=============
+// **************************************
 
 var external_extensions: ?[][*:0]const u8 = null;
 
-// temporary global vulkan state objects, most of which will be my wrapper types
-var context: vk_api.Context = undefined;
-var device: vk_api.Device = undefined;
-var surface: vk_api.Surface = undefined;
+var context: api.Instance = undefined;
+var device: api.Device = undefined;
+var surface: api.Surface = undefined;
 
-var graphics_queue: vk_api.GraphicsQueue = undefined;
-var present_queue: vk_api.PresentQueue = undefined;
-var swapchain: vk_api.Swapchain = undefined;
+var graphics_queue: api.GraphicsQueue = undefined;
+var present_queue: api.PresentQueue = undefined;
+var swapchain: api.Swapchain = undefined;
 
 var window_handle: ?*glfw.Window = null;
 
-var renderpass: vk_api.RenderPass = undefined;
+var renderpass: api.RenderPass = undefined;
 
-var graphics_pipeline: vk_api.GraphicsPipeline = undefined;
+var graphics_pipeline: api.GraphicsPipeline = undefined;
 
 // rendering stuff
-var framebuffers: vk_api.FrameBufferSet = undefined;
-var depth_image: DepthImage = undefined;
+var framebuffers: api.FrameBuffer = undefined;
+var depth_image: api.DepthImage = undefined;
 
-var command_buffer: vk_api.CommandBufferSet = undefined;
+var command_buffer: api.CommandBuffer = undefined;
 
 const validation_layers: [1][*:0]const u8 = .{"VK_LAYER_KHRONOS_validation"};
-const device_extensions = [_][*:0]const u8{vk.extensions.khr_swapchain.name};
+const device_extensions = [_][*:0]const u8{api.extensions.khr_swapchain.name};
 
-var render_finished_semaphore: vk.Semaphore = .null_handle;
-var image_finished_semaphore: vk.Semaphore = .null_handle;
-var present_finished_fence: vk.Fence = .null_handle;
+var render_finished_semaphore: api.Semaphore = .null_handle;
+var image_finished_semaphore: api.Semaphore = .null_handle;
+var present_finished_fence: api.Fence = .null_handle;
 
 const TestVertexInput = extern struct {
-    position: meth.Vec3,
-    color: meth.Vec3,
-    uv: meth.Vec2,
+    position: math.Vec3,
+    color: math.Vec3,
+    uv: math.Vec2,
 };
 
 const TestUniforms = extern struct {
-    model: meth.Mat4,
-    view: meth.Mat4,
-    projection: meth.Mat4,
+    model: math.Mat4,
+    view: math.Mat4,
+    projection: math.Mat4,
 };
 
-const UniformBuffer = ub.UniformBuffer(TestUniforms);
+const UniformBuffer = api.ComptimeUniformBuffer(TestUniforms);
 
 var test_uniforms: TestUniforms = undefined;
 
-const VertexBuffer = vb.VertexBuffer(TestVertexInput);
-const IndexBuffer = ib.IndexBuffer(u16);
+const VertexBuffer = api.ComptimeVertexBuffer(TestVertexInput);
+const IndexBuffer = api.ComptimeIndexBuffer(u16);
 
 var vertex_buffer: VertexBuffer = undefined;
 var index_buffer: IndexBuffer = undefined;
 var uniform_buffer: UniformBuffer = undefined;
 
-var vb_interface: buffer.AnyBuffer = undefined;
-var ib_interface: buffer.AnyBuffer = undefined;
+var vb_interface: api.BufInterface = undefined;
+var ib_interface: api.BufInterface = undefined;
 
-const TestDescriptor = descriptor.GenericDescriptor(
-    &[_]descriptor.LayoutBindings{ .{
+const TestDescriptor = api.ComptimeDescriptor(
+    &[_]api.DescriptorBinding{ .{
         .stages = .{ .vertex_bit = true },
         .type = .Uniform,
     }, .{
@@ -109,13 +96,14 @@ const TestDescriptor = descriptor.GenericDescriptor(
 );
 var test_descriptor: TestDescriptor = undefined;
 
-var test_tex: TexImage = undefined;
+var test_tex: api.TexImage = undefined;
+
 
 fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
     glfw_log.err("error code {d} -- Message: {s}", .{ code, desc });
 }
 
-pub fn testInit(allocator: Allocator) !void {
+fn init(allocator: Allocator) !void {
     _ = glfw.setErrorCallback(glfwErrorCallback);
 
     // scratch (Arena) allocator for memory stuff
@@ -130,11 +118,11 @@ pub fn testInit(allocator: Allocator) !void {
     try extensions.appendSlice(external_extensions orelse &[0][*:0]const u8{});
     try extensions.appendSlice(&[_][*:0]const u8{
         // vk.extensions.khr_portability_enumeration.name, // renderdoc no likee this one
-        vk.extensions.khr_get_physical_device_properties_2.name,
-        vk.extensions.ext_debug_utils.name,
+        api.extensions.khr_get_physical_device_properties_2.name,
+        api.extensions.ext_debug_utils.name,
     });
 
-    context = try vk_api.Context.init(&.{
+    context = try api.Instance.init(&.{
         .loader = glfw.glfwGetInstanceProcAddress,
         .allocator = allocator,
         .instance = .{
@@ -146,23 +134,23 @@ pub fn testInit(allocator: Allocator) !void {
     });
     errdefer context.deinit();
 
-    surface = try vk_api.Surface.init(window_handle orelse
+    surface = try api.Surface.init(window_handle orelse
         return error.NoWindowSpecified, &context);
     errdefer surface.deinit();
 
-    device = try vk_api.Device.init(&context, &.{
+    device = try api.Device.init(&context, &.{
         .surface = &surface,
         .required_extensions = &device_extensions,
     });
     errdefer device.deinit();
 
-    graphics_queue = try vk_api.GraphicsQueue.init(&device);
+    graphics_queue = try api.GraphicsQueue.init(&device);
     errdefer graphics_queue.deinit();
 
-    present_queue = try vk_api.PresentQueue.init(&device);
+    present_queue = try api.PresentQueue.init(&device);
     errdefer present_queue.deinit();
 
-    swapchain = try vk_api.Swapchain.init(&device, &surface, &.{
+    swapchain = try api.Swapchain.init(&device, &surface, &.{
         .requested_present_mode = .mailbox_khr,
         .requested_format = .{
             .color_space = .srgb_nonlinear_khr,
@@ -176,14 +164,14 @@ pub fn testInit(allocator: Allocator) !void {
     errdefer swapchain.deinit();
 
     // test create shader modules and stuff
-    const vert_shader_module = try shader.Module.from_source_file(
+    const vert_shader_module = try api.ShaderModule.from_source_file(
         .Vertex,
         "shaders/shader.vert",
         &device,
     );
 
     defer vert_shader_module.deinit();
-    const frag_shader_module = try shader.Module.from_source_file(
+    const frag_shader_module = try api.ShaderModule.from_source_file(
         .Fragment,
         "shaders/shader.frag",
         &device,
@@ -191,22 +179,22 @@ pub fn testInit(allocator: Allocator) !void {
     defer frag_shader_module.deinit();
 
     // test create fixed function pipeline state
-    const dynamic_states = [_]vk.DynamicState{
+    const dynamic_states = [_]api.DynamicState{
         .viewport,
         .scissor,
     };
 
-    test_tex = try TexImage.fromFile(&device, "textures/shrek.png", allocator);
+    test_tex = try api.TexImage.fromFile(&device, "textures/shrek.png", allocator);
     errdefer test_tex.deinit();
 
     uniform_buffer = try UniformBuffer.create(&device);
     errdefer uniform_buffer.buffer().deinit();
 
-    var bindings = [_]descriptor.ResolvedBinding{
-        descriptor.ResolvedBinding{ .Uniform = .{
+    var bindings = [_]api.ResolvedDescriptorBinding{
+        .{ .Uniform = .{
             .res = uniform_buffer.buffer(),
         } },
-        descriptor.ResolvedBinding{ .Sampler = .{
+        .{ .Sampler = .{
             .res = &test_tex,
         } },
     };
@@ -216,20 +204,20 @@ pub fn testInit(allocator: Allocator) !void {
     });
     errdefer test_descriptor.deinit();
 
-    var fixed_function_state = vk_api.FixedFunctionState{};
+    var fixed_function_state = api.FixedFunctionState{};
     fixed_function_state.init_self(&device, &.{
         .viewport = .{ .Swapchain = &swapchain },
         .dynamic_states = &dynamic_states,
         .deez_nuts = true,
         .vertex_binding = VertexBuffer.Description.vertex_desc,
         .vertex_attribs = VertexBuffer.Description.attrib_desc,
-        .descriptors = &[_]vk.DescriptorSetLayout{test_descriptor.h_desc_layout},
+        .descriptors = &[_]api.vk.DescriptorSetLayout{test_descriptor.h_desc_layout},
     });
     defer fixed_function_state.deinit();
 
     // test create render pass state and stuff i guess
 
-    renderpass = try vk_api.RenderPass.initAlloc(&device, &[_]vk_api.RenderPass.ConfigEntry{
+    renderpass = try api.RenderPass.initAlloc(&device, &[_]api.RenderPass.ConfigEntry{
         .{
             .attachment = .{
                 .format = swapchain.surface_format.format,
@@ -259,21 +247,21 @@ pub fn testInit(allocator: Allocator) !void {
     }, scratch);
     errdefer renderpass.deinit();
 
-    graphics_pipeline = try vk_api.GraphicsPipeline.init(&device, &.{
+    graphics_pipeline = try api.GraphicsPipeline.init(&device, &.{
         .renderpass = &renderpass,
         .fixed_functions = &fixed_function_state,
-        .shader_stages = &[_]shader.Module{ vert_shader_module, frag_shader_module },
+        .shader_stages = &[_]api.ShaderModule{ vert_shader_module, frag_shader_module },
     }, scratch);
     errdefer graphics_pipeline.deinit();
 
-    depth_image = try DepthImage.init(&device, swapchain.extent);
+    depth_image = try api.DepthImage.init(&device, swapchain.extent);
     errdefer depth_image.deinit();
 
-    framebuffers = try vk_api.FrameBufferSet.initAlloc(&device, allocator, &.{
+    framebuffers = try api.FrameBuffer.initAlloc(&device, allocator, &.{
         .renderpass = &renderpass,
         .image_views = swapchain.images,
         .depth_view = depth_image.view.h_view,
-        .extent = vk.Rect2D{
+        .extent = api.vk.Rect2D{
             .extent = swapchain.extent,
             .offset = .{ .x = 0, .y = 0 },
         },
@@ -289,19 +277,19 @@ pub fn testInit(allocator: Allocator) !void {
         .flags = .{ .signaled_bit = true },
     }, null);
 
-    command_buffer = try vk_api.CommandBufferSet.init(&device);
+    command_buffer = try api.CommandBuffer.init(&device);
 
     // test vertex data and stuff
     const vertex_data = [_]TestVertexInput{
-        .{ .position = meth.vec(.{ -0.5, 0.0, -0.5 }), .color = meth.vec(.{ 1.0, 0.0, 0.0 }), .uv = meth.vec(.{ 1.0, 0.0 }) },
-        .{ .position = meth.vec(.{ 0.5, 0.0, -0.5 }), .color = meth.vec(.{ 0.0, 1.0, 0.0 }), .uv = meth.vec(.{ 0.0, 0.0 }) },
-        .{ .position = meth.vec(.{ 0.5, 0.0, 0.5 }), .color = meth.vec(.{ 0.0, 0.0, 1.0 }), .uv = meth.vec(.{ 0.0, 1.0 }) },
-        .{ .position = meth.vec(.{ -0.5, 0.0, 0.5 }), .color = meth.vec(.{ 1.0, 1.0, 1.0 }), .uv = meth.vec(.{ 1.0, 1.0 }) },
+        .{ .position = math.vec(.{ -0.5, 0.0, -0.5 }), .color = math.vec(.{ 1.0, 0.0, 0.0 }), .uv = math.vec(.{ 1.0, 0.0 }) },
+        .{ .position = math.vec(.{ 0.5, 0.0, -0.5 }), .color = math.vec(.{ 0.0, 1.0, 0.0 }), .uv = math.vec(.{ 0.0, 0.0 }) },
+        .{ .position = math.vec(.{ 0.5, 0.0, 0.5 }), .color = math.vec(.{ 0.0, 0.0, 1.0 }), .uv = math.vec(.{ 0.0, 1.0 }) },
+        .{ .position = math.vec(.{ -0.5, 0.0, 0.5 }), .color = math.vec(.{ 1.0, 1.0, 1.0 }), .uv = math.vec(.{ 1.0, 1.0 }) },
 
-        .{ .position = meth.vec(.{ -0.5, 0.5, -0.5 }), .color = meth.vec(.{ 1.0, 0.0, 0.0 }), .uv = meth.vec(.{ 1.0, 0.0 }) },
-        .{ .position = meth.vec(.{ 0.5, 0.5, -0.5 }), .color = meth.vec(.{ 0.0, 1.0, 0.0 }), .uv = meth.vec(.{ 0.0, 0.0 }) },
-        .{ .position = meth.vec(.{ 0.5, 0.5, 0.5 }), .color = meth.vec(.{ 0.0, 0.0, 1.0 }), .uv = meth.vec(.{ 0.0, 1.0 }) },
-        .{ .position = meth.vec(.{ -0.5, 0.5, 0.5 }), .color = meth.vec(.{ 1.0, 1.0, 1.0 }), .uv = meth.vec(.{ 1.0, 1.0 }) },
+        .{ .position = math.vec(.{ -0.5, 0.5, -0.5 }), .color = math.vec(.{ 1.0, 0.0, 0.0 }), .uv = math.vec(.{ 1.0, 0.0 }) },
+        .{ .position = math.vec(.{ 0.5, 0.5, -0.5 }), .color = math.vec(.{ 0.0, 1.0, 0.0 }), .uv = math.vec(.{ 0.0, 0.0 }) },
+        .{ .position = math.vec(.{ 0.5, 0.5, 0.5 }), .color = math.vec(.{ 0.0, 0.0, 1.0 }), .uv = math.vec(.{ 0.0, 1.0 }) },
+        .{ .position = math.vec(.{ -0.5, 0.5, 0.5 }), .color = math.vec(.{ 1.0, 1.0, 1.0 }), .uv = math.vec(.{ 1.0, 1.0 }) },
     };
 
     vertex_buffer = VertexBuffer.create(&device, vertex_data.len) catch |err| {
@@ -336,86 +324,78 @@ pub fn testInit(allocator: Allocator) !void {
     };
 
     test_uniforms = .{
-        .model = meth.Mat4.identity().rotateX(meth.radians(45.0)),
-        .projection = meth.Mat4.perspective(
-            meth.radians(75.0),
+        .model = math.Mat4.identity().rotateX(math.radians(45.0)),
+        .projection = math.Mat4.perspective(
+            math.radians(75.0),
             600.0 / 900.0,
             0.1,
             30.0,
         ),
-        .view = meth.Mat4.lookAt(
-            meth.vec(.{ 2.0, 2.0, 2.0 }),
-            meth.vec(.{ 0, 0, 0 }),
-            meth.Vec3.global_up,
+        .view = math.Mat4.lookAt(
+            math.vec(.{ 2.0, 2.0, 2.0 }),
+            math.vec(.{ 0, 0, 0 }),
+            math.Vec3.global_up,
         ),
     };
 
     // test_uniforms = .{
-    //     .model = meth.Mat4.rotateZ(, meth.radians(45.0)),
-    //     .projection = meth.zlm.Mat4.createPerspective(
-    //         meth.radians(45.0),
+    //     .model = math.Mat4.rotateZ(, math.radians(45.0)),
+    //     .projection = math.zlm.Mat4.createPerspective(
+    //         math.radians(45.0),
     //         600.0 / 900.0,
     //         0.1,
     //         30.0,
     //     ),
-    //     .view = meth.zlm.Mat4.createLookAt(meth.zlm.vec3(2.0, 2.0, 2.0), meth.zlm.vec3(0, 0, 0), meth.zlm.Vec3.unitY),
+    //     .view = math.zlm.Mat4.createLookAt(math.zlm.vec3(2.0, 2.0, 2.0), math.zlm.vec3(0, 0, 0), math.zlm.Vec3.unitY),
     // };
     //
 
     // create test textures and stuff I guess
 }
 
-pub fn setWindow(window: *glfw.Window) void {
-    window_handle = window;
-}
-
-pub fn setRequiredExtensions(names: [][*:0]const u8) void {
-    external_extensions = names;
-}
-
 fn updateUniforms() !void {
     test_uniforms = .{
-        .model = meth.Mat4.identity().rotateY(
-            meth.radians(45.0) * @as(f32, @floatCast(glfw.getTime())),
+        .model = math.Mat4.identity().rotateY(
+            math.radians(45.0) * @as(f32, @floatCast(glfw.getTime())),
         ),
-        .projection = meth.Mat4.perspective(
-            meth.radians(45.0),
+        .projection = math.Mat4.perspective(
+            math.radians(45.0),
             900.0 / 600.0,
             0.1,
             30.0,
         ),
-        .view = meth.Mat4.lookAt(
-            meth.vec(.{ 2.0, 2.0, 2.0 }),
-            meth.vec(.{ 0, 0, 0 }),
-            meth.Vec3.global_up,
+        .view = math.Mat4.lookAt(
+            math.vec(.{ 2.0, 2.0, 2.0 }),
+            math.vec(.{ 0, 0, 0 }),
+            math.Vec3.global_up,
         ),
     };
 
     // test_uniforms = .{
-    //     .model = meth.zlm.Mat4.createAngleAxis(meth.zlm.Vec3.unitY, meth.radians(45.0) * @as(f32, @floatCast(glfw.getTime()))),
-    //     .projection = meth.zlm.Mat4.createPerspective(
-    //         meth.radians(45.0),
+    //     .model = math.zlm.Mat4.createAngleAxis(math.zlm.Vec3.unitY, math.radians(45.0) * @as(f32, @floatCast(glfw.getTime()))),
+    //     .projection = math.zlm.Mat4.createPerspective(
+    //         math.radians(45.0),
     //         600.0 / 900.0,
     //         0.1,
     //         30.0,
     //     ),
-    //     .view = meth.zlm.Mat4.createLookAt(meth.zlm.vec3(2.0, 2.0, 2.0), meth.zlm.vec3(0, 0, 0), meth.zlm.Vec3.unitY),
+    //     .view = math.zlm.Mat4.createLookAt(math.zlm.vec3(2.0, 2.0, 2.0), math.zlm.vec3(0, 0, 0), math.zlm.Vec3.unitY),
     // };
 
     try test_descriptor.update(0, &test_uniforms);
 }
 
-pub fn testLoop() !void {
+fn mainLoop() !void {
     _ = device.pr_dev.waitForFences(
         1,
-        util.asManyPtr(vk.Fence, &present_finished_fence),
-        vk.TRUE,
+        util.asManyPtr(api.Fence, &present_finished_fence),
+        vk_true,
         std.math.maxInt(u64),
     ) catch {}; // fuck rendering errors
 
     device.pr_dev.resetFences(
         1,
-        util.asManyPtr(vk.Fence, &present_finished_fence),
+        util.asManyPtr(api.Fence, &present_finished_fence),
     ) catch {};
 
     const current_image = try swapchain.getNextImage(image_finished_semaphore, null);
@@ -453,7 +433,7 @@ pub fn testLoop() !void {
     );
 }
 
-pub fn testDeinit() void {
+fn deinit() void {
     device.waitIdle() catch {
         root_log.err("Failed to wait on device", .{});
     };
@@ -480,4 +460,34 @@ pub fn testDeinit() void {
     surface.deinit();
     device.deinit();
     context.deinit();
+}
+
+
+
+pub fn main() !void {
+    var window = try helpers.makeBasicWindow(900, 600, "Test Window");
+    defer glfw.terminate();
+    defer window.destroy();
+
+    glfw.vulkanSupported() catch |err| {
+        std.debug.print("Could not load Vulkan\n", .{});
+        return err;
+    };
+
+    var gpa = std.heap.DebugAllocator(.{}).init;
+
+    window.show();
+
+    external_extensions = helpers.glfwInstanceExtensions();
+    window_handle = &window;
+
+    try init(gpa.allocator());
+    defer deinit();
+
+    while (!window.shouldClose()) {
+        glfw.pollEvents();
+        try mainLoop();
+    }
+
+    std.debug.print("You win!\n", .{});
 }
