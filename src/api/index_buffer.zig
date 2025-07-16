@@ -4,6 +4,7 @@ const buf = @import("buffer.zig");
 const GenericBuffer = buf.GenericBuffer;
 const CommandBuffer = @import("command_buffer.zig");
 const DeviceHandler = @import("base.zig").DeviceHandler;
+const Context = @import("../context.zig");
 const AnyBuffer = buf.AnyBuffer;
 
 fn getIndexType(T: type) vk.IndexType {
@@ -28,8 +29,8 @@ pub fn IndexBuffer(T: type) type {
 
         buf: Inner,
 
-        pub fn create(dev: *const DeviceHandler, size: usize) !Self {
-            const buff = try Inner.create(dev, size);
+        pub fn create(ctx: *const Context, size: usize) !Self {
+            const buff = try Inner.create(ctx, size);
 
             return .{
                 .buf = buff,

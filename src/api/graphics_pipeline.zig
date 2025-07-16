@@ -55,7 +55,7 @@ pub const FixedFunctionState = struct {
     blend_attachment: vk.PipelineColorBlendAttachmentState = undefined,
     color_blending_state: vk.PipelineColorBlendStateCreateInfo = undefined,
 
-    pr_dev: vk.DeviceProxy = undefined,
+    pr_dev: *const vk.DeviceProxy = undefined,
 
     pub fn init_self(self: *FixedFunctionState, ctx: *const Context, config: *const Config) void {
         if (!config.deez_nuts) @panic("Deez nuts must explicitly be true!!!!!!");
@@ -234,7 +234,8 @@ pr_dev: *const vk.DeviceProxy,
 viewport_info: vk.Viewport,
 scissor_info: vk.Rect2D,
 
-pub fn init(dev: *const DeviceHandler, config: *const PipelineConfig, allocator: Allocator) !Self {
+pub fn init(ctx: *const Context, config: *const PipelineConfig, allocator: Allocator) !Self {
+    const dev: *const DeviceHandler = ctx.env(.dev);
     const pipeline_layout = dev.pr_dev.createPipelineLayout(
         &config.fixed_functions.pipeline_layout_info,
         null,

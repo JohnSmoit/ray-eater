@@ -6,6 +6,7 @@ const Context = @import("../context.zig");
 
 
 const Swapchain = @import("swapchain.zig");
+const DeviceHandler = @import("base.zig").DeviceHandler;
 const CommandBuffer = @import("command_buffer.zig");
 
 pub const QueueFamily = enum {
@@ -24,18 +25,21 @@ pub fn GenericQueue(comptime p_family: QueueFamily) type {
         h_queue: vk.Queue,
         pr_dev: *const vk.DeviceProxy,
 
-        pub fn init(ctx: *const Context) !Self {
-            // hardcode to graphics queue for now
-            const pr_dev: *const vk.DeviceProxy = ctx.env(.di);
-            const queue_handle: vk.Queue = ctx.env(.dev).getQueueHandle(family) orelse {
+        pub fn initDev(dev: *const DeviceHandler) !Self {
+            const queue_handle: vk.Queue = dev.getQueueHandle(family) orelse {
                 log.debug("Failed to acquire Queue handle", .{});
                 return error.MissingQueueHandle;
             };
 
             return .{
                 .h_queue = queue_handle,
-                .pr_dev = pr_dev,
+                .pr_dev = &dev.pr_dev,
             };
+        }
+
+        pub fn init(ctx: *const Context) !Self {
+            const dev: *const DeviceHandler = ctx.env(.dev);
+            return initDev(dev);
         }
 
         pub fn deinit(self: *Self) void {

@@ -32,7 +32,7 @@ pub fn initAlloc(
     allocator: Allocator,
     attachments: []const ConfigEntry,
 ) !Self {
-    const pr_dev: vk.DeviceProxy = ctx.env(.di);
+    const pr_dev: *const vk.DeviceProxy = ctx.env(.di);
     var col_refs = try allocator.alloc(vk.AttachmentReference, attachments.len);
     defer allocator.free(col_refs);
 
@@ -113,7 +113,7 @@ pub fn initAlloc(
     log.debug("Successfully initialized renderpass", .{});
 
     return .{
-        .pr_dev = &pr_dev,
+        .pr_dev = pr_dev,
         .h_rp = renderpass,
     };
 }

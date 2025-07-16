@@ -13,8 +13,9 @@ const Layout = union(enum) {
     Int: TypeInfo.Int,
 };
 
-const DeviceHandler = @import("base.zig");
+const DeviceHandler = @import("base.zig").DeviceHandler;
 const CommandBuffer = @import("command_buffer.zig");
+const Context = @import("../context.zig");
 const AnyBuffer = buf.AnyBuffer;
 
 fn validateType(comptime T: type) Layout {
@@ -97,7 +98,7 @@ pub fn VertexBuffer(T: type) type {
 
         buf: Inner,
 
-        pub fn create(dev: *const DeviceHandler, size: usize) !Self {
+        pub fn create(dev: *const Context, size: usize) !Self {
             const buff = try Inner.create(dev, size);
 
             return .{

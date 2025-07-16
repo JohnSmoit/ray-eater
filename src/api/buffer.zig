@@ -128,6 +128,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
         h_mem: ?vk.DeviceMemory = null,
         size: usize = 0,
         dev: *const DeviceHandler = undefined,
+        ctx: *const Context,
 
         /// NOTE: This function allocates memory, but since the memory used for buffers
         /// is not neccesarily normal heap memory, I need to do some reasearch how/whether
@@ -145,6 +146,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
                 }, null),
                 .size = size,
                 .dev = dev,
+                .ctx = ctx,
             };
             errdefer dev.pr_dev.destroyBuffer(buf.h_buf, null);
 
@@ -192,7 +194,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             const Staging = StagingType(T);
             assert(config.usage.contains(.{ .transfer_dst_bit = true }));
 
-            const staging_buf = try Staging.create(self.dev, self.size);
+            const staging_buf = try Staging.create(self.ctx, self.size);
             return staging_buf;
         }
 

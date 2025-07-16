@@ -4,6 +4,7 @@ const vk = @import("vulkan");
 const Image = @import("image.zig");
 const ImageView = Image.View;
 const DeviceHandler = @import("base.zig").DeviceHandler;
+const Context = @import("../context.zig");
 
 const Self = @This();
 
@@ -13,9 +14,10 @@ img: Image,
 view: ImageView,
 dev: *const DeviceHandler,
 
-pub fn init(dev: *const DeviceHandler, dimensions: vk.Extent2D) !Self {
+pub fn init(ctx: *const Context, dimensions: vk.Extent2D) !Self {
+    const dev: *const DeviceHandler = ctx.env(.dev);
     log.debug("Chosen depth format: {s}", .{@tagName(try dev.findDepthFormat())});
-    const image = try Image.init(dev, &.{
+    const image = try Image.init(ctx, &.{
         .format = try dev.findDepthFormat(),
         .height = dimensions.height,
         .width = dimensions.width,

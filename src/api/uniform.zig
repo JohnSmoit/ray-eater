@@ -4,6 +4,7 @@ const buffer = @import("buffer.zig");
 
 const DeviceHandler = @import("base.zig").DeviceHandler;
 const CommandBuffer = @import("command_buffer.zig");
+const Context = @import("../context.zig");
 
 const AnyBuffer = buffer.AnyBuffer;
 const GenericBuffer = buffer.GenericBuffer;
@@ -23,8 +24,8 @@ pub fn UniformBuffer(T: type) type {
         buf: InnerBuffer,
         mem: []T,
 
-        pub fn create(dev: *const DeviceHandler) !Self {
-            var buf = try InnerBuffer.create(dev, 1);
+        pub fn create(ctx: *const Context) !Self {
+            var buf = try InnerBuffer.create(ctx, 1);
             errdefer buf.deinit(); // conditionally deinits allocated memory if it exists
 
             const mem = try buf.mapMemory();

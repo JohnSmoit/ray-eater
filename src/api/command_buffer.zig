@@ -19,10 +19,10 @@ one_shot: bool = false,
 
 pub fn init(ctx: *const Context) !Self {
     const dev = ctx.env(.dev);
-    return init_dev(dev);
+    return initDev(dev);
 }
 
-fn init_dev(dev: *const DeviceHandler) !Self {
+fn initDev(dev: *const DeviceHandler) !Self {
     var cmd_buffer: vk.CommandBuffer = undefined;
     dev.pr_dev.allocateCommandBuffers(
         &.{
@@ -45,7 +45,7 @@ fn init_dev(dev: *const DeviceHandler) !Self {
 }
 
 pub fn oneShot(dev: *const DeviceHandler) !Self {
-    var buf = try init_dev(dev);
+    var buf = try initDev(dev);
     buf.one_shot = true;
 
     try buf.beginConfig(.{ .one_time_submit_bit = true });
@@ -81,7 +81,7 @@ pub fn end(self: *const Self) !void {
     // We need queue handles from the context straight up, no way around it ugh
     // this shit is too bad to handle otherwise
     if (self.one_shot) {
-        const submit_queue = try GraphicsQueue.init(self.ctx);
+        const submit_queue = try GraphicsQueue.initDev(self.dev);
         try submit_queue.submit(self, null, null, null);
         submit_queue.waitIdle();
     }

@@ -14,6 +14,7 @@ const Allocator = std.mem.Allocator;
 const DeviceHandler = @import("base.zig").DeviceHandler;
 const UniformBuffer = uniform.UniformBuffer;
 const CommandBuffer = @import("command_buffer.zig");
+const Context = @import("../context.zig");
 
 const AnyBuffer = buffer.AnyBuffer;
 
@@ -150,7 +151,9 @@ pub fn GenericDescriptor(comptime bind_info: []const LayoutBindings) type {
             );
         }
 
-        pub fn init(dev: *const DeviceHandler, config: Config) !Self {
+        pub fn init(ctx: *const Context, config: Config) !Self {
+            const dev: *const DeviceHandler = ctx.env(.dev);
+
             if (config.bindings.len < num_bindings) {
                 return error.InvalidBindings;
             }

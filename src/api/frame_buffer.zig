@@ -29,7 +29,7 @@ extent: vk.Rect2D,
 /// Unfortunately, allocation is neccesary due to the runtime count of the swapchain
 /// images
 pub fn initAlloc(ctx: *const Context, allocator: Allocator, config: *const Config) !Self {
-    const pr_dev: vk.DeviceProxy = ctx.env(.di);
+    const pr_dev: *const vk.DeviceProxy = ctx.env(.di);
     var framebuffers = try allocator.alloc(vk.Framebuffer, config.image_views.len);
 
     const attachment_count: u32 = if (config.depth_view != null) 2 else 1;
@@ -49,7 +49,7 @@ pub fn initAlloc(ctx: *const Context, allocator: Allocator, config: *const Confi
 
     return .{
         .framebuffers = framebuffers,
-        .pr_dev = &pr_dev,
+        .pr_dev = pr_dev,
         .allocator = allocator,
         .extent = config.extent,
     };
