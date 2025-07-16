@@ -198,7 +198,7 @@ fn init(allocator: Allocator) !void {
     });
     defer fixed_function_state.deinit();
 
-    renderpass = try api.RenderPass.initAlloc(context, &[_]api.RenderPass.ConfigEntry{
+    renderpass = try api.RenderPass.initAlloc(context, scratch, &[_]api.RenderPass.ConfigEntry{
         .{
             .attachment = .{
                 .format = swapchain.surface_format.format,
@@ -225,7 +225,7 @@ fn init(allocator: Allocator) !void {
             },
             .tipo = .Depth,
         },
-    }, scratch);
+    });
     errdefer renderpass.deinit();
 
     graphics_pipeline = try api.GraphicsPipeline.init(context, &.{
