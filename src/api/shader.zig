@@ -15,6 +15,7 @@ pub fn toShaderStageFlags(stage: Stage) vk.ShaderStageFlags {
     return switch (stage) {
         .Fragment => vk.ShaderStageFlags{ .fragment_bit = true },
         .Vertex => vk.ShaderStageFlags{ .vertex_bit = true },
+        .Compute => vk.ShaderStageFlags{ .compute_bit = true },
     };
 }
 

@@ -16,7 +16,7 @@ const Dependencies = struct {
 };
 
 fn resolveGLFWSystemDeps(m: *Module) void {
-    //TODO: link proper windowing modules for non-windows
+    //TODO: link proper runtime modules for non-windows
     m.linkSystemLibrary("user32", .{});
     m.linkSystemLibrary("gdi32", .{});
     m.linkSystemLibrary("shell32", .{});
@@ -87,6 +87,7 @@ const SampleEntry = struct {
 };
 const sample_files = [_]SampleEntry{
     .{ .name = "basic_planes", .path = "basic_planes.zig" },
+    .{ .name = "basic_compute", .path = "basic_compute.zig" },
     .{ .name = "test_sample", .path = "test_sample.zig" },
 };
 /// build sample applications which demonstrate the usage
