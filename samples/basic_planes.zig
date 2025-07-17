@@ -11,6 +11,8 @@ const api = ray.api;
 const helpers = @import("common/helpers.zig");
 const util = ray.util;
 
+const span = util.span;
+
 const glfw = @import("glfw");
 const Window = glfw.Window;
 
@@ -85,17 +87,7 @@ var uniform_buffer: UniformBuffer = undefined;
 var vb_interface: api.BufInterface = undefined;
 var ib_interface: api.BufInterface = undefined;
 
-const TestDescriptor = api.ComptimeDescriptor(
-    &[_]api.DescriptorBinding{ .{
-        .stages = .{ .vertex_bit = true },
-        .type = .Uniform,
-    }, .{
-        .stages = .{ .fragment_bit = true },
-        .type = .Sampler,
-    } },
-);
-
-var test_descriptor: TestDescriptor = undefined;
+var test_descriptor: api.Descriptor = undefined;
 var test_tex: api.TexImage = undefined;
 
 fn glfwErrorCallback(code: c_int, desc: [*c]const u8) callconv(.c) void {
@@ -173,17 +165,16 @@ fn init(allocator: Allocator) !void {
     uniform_buffer = try UniformBuffer.create(context);
     errdefer uniform_buffer.buffer().deinit();
 
-    var bindings = [_]api.ResolvedDescriptorBinding{
-        .{ .Uniform = .{
-            .res = uniform_buffer.buffer(),
-        } },
-        .{ .Sampler = .{
-            .res = &test_tex,
-        } },
-    };
+    const desc_bindings = [_]api.ResolvedDescriptorBinding{ .{
+        .stages = .{ .vertex_bit = true },
+        .data = .{ .Uniform = uniform_buffer.buffer() },
+    }, .{
+        .stages = .{ .fragment_bit = true },
+        .data = .{ .Sampler = &test_tex },
+    } };
 
-    test_descriptor = try TestDescriptor.init(context, .{
-        .bindings = &bindings,
+    test_descriptor = try api.Descriptor.init(context, allocator, .{
+        .bindings = desc_bindings[0..],
     });
     errdefer test_descriptor.deinit();
 
