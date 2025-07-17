@@ -3,7 +3,6 @@ pub const vk = @import("vulkan");
 const base = @import("base.zig");
 const queue = @import("queue.zig");
 const buf = @import("buffer.zig");
-const desc = @import("descriptor.zig");
 const ind_buf = @import("index_buffer.zig");
 const sh = @import("shader.zig");
 const uni_buf = @import("uniform.zig");
@@ -46,9 +45,8 @@ pub const ComptimeIndexBuffer = ind_buf.IndexBuffer;
 pub const ComptimeUniformBuffer = uni_buf.UniformBuffer;
 pub const BufInterface = buf.AnyBuffer;
 
-pub const ComptimeDescriptor = desc.GenericDescriptor;
-pub const DescriptorBinding = desc.LayoutBindings;
-pub const ResolvedDescriptorBinding = desc.ResolvedBinding;
+pub const Descriptor = @import("descriptor.zig");
+pub const ResolvedDescriptorBinding = Descriptor.ResolvedBinding;
 
 // shaders
 pub const ShaderModule = sh.Module;
