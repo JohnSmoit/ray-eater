@@ -18,9 +18,6 @@ const Window = glfw.Window;
 
 const Context = ray.Context;
 
-// WARN: Basically everything under this line will be yeeted in favor of the new context system
-// (Once it's done)
-
 const Allocator = std.mem.Allocator;
 
 const root_log = std.log.scoped(.root);

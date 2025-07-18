@@ -34,6 +34,9 @@ pub const RenderPass = @import("renderpass.zig");
 pub const CommandBuffer = @import("command_buffer.zig");
 pub const FixedFunctionState = GraphicsPipeline.FixedFunctionState;
 
+// Compute (all by its lonesome)
+pub const Compute = @import("compute.zig");
+
 // vulkan images (textures, depth images, and generic images)
 pub const Image = @import("image.zig");
 pub const DepthImage = @import("depth.zig");
@@ -47,6 +50,7 @@ pub const BufInterface = buf.AnyBuffer;
 
 pub const Descriptor = @import("descriptor.zig");
 pub const ResolvedDescriptorBinding = Descriptor.ResolvedBinding;
+
 
 // shaders
 pub const ShaderModule = sh.Module;
