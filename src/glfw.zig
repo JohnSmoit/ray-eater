@@ -55,7 +55,6 @@ const glfwWindowShouldClose = c.glfwWindowShouldClose;
 const glfwCreateWindow = c.glfwCreateWindow;
 const glfwWindowHint = c.glfwWindowHint;
 
-
 pub const Window = struct {
     handle: *GLFWwindow,
 
@@ -86,4 +85,20 @@ pub const Window = struct {
     pub fn show(self: *const Window) void {
         c.glfwShowWindow(self.handle);
     }
+
+    const Size = struct {
+        width: u32,
+        height: u32,
+};
+    pub fn dimensions(self: *const Window) Size {
+        var w: c_int = undefined;
+        var h: c_int = undefined;
+
+        c.glfwGetWindowSize(self.handle, &w, &h); 
+
+        return .{
+            .width = @intCast(w),
+            .height = @intCast(h),
+        };
+    } 
 };

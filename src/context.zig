@@ -98,6 +98,9 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
     const base_inst_ext = [_][*:0]const u8{
         api.extensions.khr_get_physical_device_properties_2.name,
         api.extensions.ext_debug_utils.name,
+        api.extensions.khr_surface.name,
+        //TODO: create proper platform window surface for non-windows users
+        api.extensions.khr_win_32_surface.name,
     };
 
     const base_dev_ext = [_][*:0]const u8{

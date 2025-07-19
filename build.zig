@@ -115,6 +115,7 @@ fn populateSampleModules(
 
         sample_mod.addImport("ray", lib_mod);
         sample_mod.addImport("glfw", deps.glfw);
+        sample_mod.addImport("vulkan", deps.vulkan);
 
         const sample_exe = b.addExecutable(.{
             .name = f.name,

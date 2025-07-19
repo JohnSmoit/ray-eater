@@ -1,6 +1,7 @@
 //! Common helperss used for multiple sample executables
 
 const std = @import("std");
+const vk = @import("vulkan");
 
 const glfw = @import("glfw");
 
@@ -28,4 +29,12 @@ pub fn makeBasicWindow(w: u32, h: u32, name: []const u8) !Window {
 pub fn glfwInstanceExtensions() [][*:0]const u8 {
     var count: u32 = 0;
     return @ptrCast(glfw.getRequiredInstanceExtensions(&count)[0..count]);
+}
+
+pub fn windowExtent(win: *const Window) vk.Extent2D {
+    const dims = win.dimensions();
+    return vk.Extent2D{
+        .width = dims.width,
+        .height = dims.height,
+    };
 }

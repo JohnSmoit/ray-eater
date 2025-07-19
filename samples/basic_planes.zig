@@ -130,7 +130,7 @@ fn init(allocator: Allocator) !void {
         .requested_present_mode = .mailbox_khr,
         .requested_format = .{
             .color_space = .srgb_nonlinear_khr,
-            .format = .b8g8r8a8_srgb,
+            .format = .r8g8b8a8_srgb,
         },
         .requested_extent = .{
             .width = 900, // hardcoded for my sanity

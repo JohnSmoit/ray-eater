@@ -40,6 +40,7 @@ pub const FixedFunctionState = struct {
 
     // NOTE: This pipeline layout field has more to do with uniforms and by extension descriptor sets,
     // so putting it here isn't really gonna work
+    // FIX: UUUUU WAIIII is this here it should be made in the pIPLEINE
     pipeline_layout_info: vk.PipelineLayoutCreateInfo = undefined,
 
     // fixed function pipeline state info
@@ -62,8 +63,6 @@ pub const FixedFunctionState = struct {
 
         self.pr_dev = ctx.env(.di);
 
-        // FIXME: If the config structs lifetime does not match this structs lifetime, this will explode
-        // yikes.
         const dynamic_states = config.dynamic_states orelse util.emptySlice(vk.DynamicState);
 
         self.dynamic_states = vk.PipelineDynamicStateCreateInfo{
@@ -71,7 +70,6 @@ pub const FixedFunctionState = struct {
             .p_dynamic_states = dynamic_states.ptr,
         };
 
-        // temporary vertex input state for now
         self.vertex_input = vk.PipelineVertexInputStateCreateInfo{
             .vertex_binding_description_count = 1,
             .p_vertex_binding_descriptions = util.asManyPtr(
