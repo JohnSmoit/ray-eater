@@ -49,8 +49,8 @@
             .hash = "N-V-__8AAOlnwQD_q2VUB2dZD64hwX7kJ2w9knrChBKgJHe0",
         },
         .RshLang = .{
-            .url = "git+https://github.com/JohnSmoit/ray-eater-shaders.git#a5c9c1240b9bbcdaab1536d909c22facf548ab7a",
-            .hash = "RshLang-0.0.0-4EjkCyFmAADvzF5CNrhKYg2-gA09u8Q10ZlJAHbbCwoI",
+            .url = "git+https://github.com/JohnSmoit/ray-eater-shaders.git#5fe9defc2e4279272af5fb442b093d5a89a23609",
+            .hash = "RshLang-0.0.0-4EjkC4hnAADKED6rCb7dvYU5MJutrKPz8eIWuaEWXyfO",
         },
     },
     .paths = .{

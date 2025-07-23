@@ -93,7 +93,7 @@ const SampleEntry = struct {
 };
 var sample_files = [_]SampleEntry{
     .{ .name = "basic_planes", .path = "basic_planes.zig" },
-    .{ .name = "basic_compute", .path = "basic_compute.zig" },
+    .{ .name = "slime", .path = "slime/main.zig" },
     .{ .name = "test_sample", .path = "test_sample.zig" },
 };
 
@@ -103,6 +103,16 @@ fn populateSampleModules(
     deps: Dependencies,
     opts: BuildOpts,
 ) void {
+    const sample_commons = b.createModule(.{
+        .root_source_file = b.path("samples/common/helpers.zig"),
+        .optimize = opts.optimize,
+        .target = opts.target,
+    });
+
+    sample_commons.addImport("ray", lib_mod);
+    sample_commons.addImport("glfw", deps.glfw);
+    sample_commons.addImport("vulkan", deps.vulkan);
+
     for (&sample_files) |*f| {
         const sample_mod = b.createModule(.{
             .root_source_file = b.path(b.pathJoin(&.{
@@ -116,6 +126,7 @@ fn populateSampleModules(
         sample_mod.addImport("ray", lib_mod);
         sample_mod.addImport("glfw", deps.glfw);
         sample_mod.addImport("vulkan", deps.vulkan);
+        sample_mod.addImport("helpers", sample_commons);
 
         const sample_exe = b.addExecutable(.{
             .name = f.name,
