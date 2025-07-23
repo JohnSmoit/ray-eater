@@ -51,7 +51,7 @@ pub const Config = struct {
     width: u32,
     height: u32,
     staging_buf: ?*StagingBuffer = null,
-    initial_layout: vk.ImageLayout,
+    initial_layout: vk.ImageLayout = .undefined,
 };
 
 // NOTE: Yet another instance of a BAD function that allocates device memory in a non-zig like fashion

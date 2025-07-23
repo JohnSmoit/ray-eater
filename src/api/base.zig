@@ -141,12 +141,6 @@ pub const InstanceHandler = struct {
             }
         }
 
-        // TODO: Conditionally enable validation layers/logging based on config property
-        // if (config.enable_debug_log) {
-        // }
-
-        // TODO: make sure our wanted extensions are available
-        //TODO: Not sure I setup the validatiopn layer configs correctly (uh oh)
         const instance = try self.w_db.createInstance(&.{
             .p_application_info = &.{
                 .p_application_name = "RayEater_Renderer",
@@ -411,6 +405,20 @@ pub const DeviceHandler = struct {
         return found_indices;
     }
 
+    const DeviceCandidate = struct {
+        dev: vk.PhysicalDevice,
+        val: u32,
+    };
+
+    fn compareCandidates(ctx: void, a: DeviceCandidate, b: DeviceCandidate) std.math.Order {
+        _ = ctx;
+        return if (a.val < b.val) .lt else if (a.val > b.val) .gt else .eq;
+    }
+    
+
+    //HACK: Since most modern GPUS are all but guarunteed to support what I'm doing,
+    //I'm just going to pick the first discrete GPU and call it a day...
+    // This will likely require a bit of upgrade when I consider making this project more portable
     fn pickSuitablePhysicalDevice(
         pr_inst: *const vk.InstanceProxy,
         config: *const Config,
@@ -426,70 +434,17 @@ pub const DeviceHandler = struct {
             };
         defer allocator.free(physical_devices);
 
-        var chosen_dev: ?vk.PhysicalDevice = null;
-        dev_loop: for (physical_devices) |dev| {
-            const dev_properties = pr_inst.getPhysicalDeviceProperties(dev);
-            log.debug(
-                \\Found Device Named {s}
-                \\    ID: {d}
-                \\    Type: {d} 
-                \\
-            , .{ dev_properties.device_name, dev_properties.device_id, dev_properties.device_type });
-
-            const dev_queue_indices = getQueueFamilies(dev, pr_inst, config.surface, allocator);
-
-            // check to see if device supports presentation (it must or it crashes)
-            const supported_extensions = pr_inst.enumerateDeviceExtensionPropertiesAlloc(
-                dev,
-                null,
-                allocator,
-            ) catch util.emptySlice(vk.ExtensionProperties);
-
-            ext_loop: for (config.required_extensions) |req| {
-                var found = false;
-
-                for (supported_extensions) |ext| {
-                    if (std.mem.orderZ(u8, @ptrCast(&ext.extension_name), req) == .eq) {
-                        found = true;
-                        break :ext_loop;
-                    }
-                }
-
-                if (!found) {
-                    continue :dev_loop;
-                }
-            }
-
-            //NOTE: Ew
-            if (dev_queue_indices.graphics_family == null or dev_queue_indices.present_family == null) {
-                continue;
-            }
-
-            var dev_present_features = getDeviceSupport(
-                pr_inst,
-                config.surface,
-                dev,
-                allocator,
-            ) catch |err| {
-                log.debug("Failed to query device presentation features due to error: {!}\n", .{err});
-                continue;
-            };
-            defer dev_present_features.deinit();
-
-            if (dev_present_features.formats.len != 0 and dev_present_features.present_modes.len != 0) {
-                chosen_dev = dev;
-                log.debug(
-                    \\Chose Device Named {s}
-                    \\    ID: {d}
-                    \\    Type: {d} 
-                    \\
-                , .{ dev_properties.device_name, dev_properties.device_id, dev_properties.device_type });
-
-                break;
+        for (physical_devices) |dev| {
+            const props = pr_inst.getPhysicalDeviceProperties(dev);
+            if (props.device_type == .discrete_gpu) {
+                log.debug("Found suitable device named: {s}", .{props.device_name});
+                return dev;
             }
         }
 
-        return chosen_dev;
+        _ = config;
+
+        return null;
     }
 
     // Later on, I plan to accept a device properties struct

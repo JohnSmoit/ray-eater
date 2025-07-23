@@ -3,7 +3,6 @@ const rshc = @import("rshc");
 
 const vk = @import("vulkan");
 
-pub const Stage = rshc.Stage;
 pub const Context = @import("../context.zig");
 const Allocator = std.mem.Allocator;
 
@@ -11,38 +10,55 @@ const log = std.log.scoped(.shader);
 
 const DeviceHandler = @import("base.zig").DeviceHandler;
 
-pub fn toShaderStageFlags(stage: Stage) vk.ShaderStageFlags {
-    return switch (stage) {
-        .Fragment => vk.ShaderStageFlags{ .fragment_bit = true },
-        .Vertex => vk.ShaderStageFlags{ .vertex_bit = true },
-        .Compute => vk.ShaderStageFlags{ .compute_bit = true },
-    };
-}
-
 pub const Module = struct {
-    pub const Config = struct {
-        stage: Stage,
-        filename: []const u8,
-    };
+    pub const Stage = rshc.Stage;
+
+    fn toShaderStageFlags(stage: Stage) vk.ShaderStageFlags {
+        return switch (stage) {
+            .Fragment => vk.ShaderStageFlags{ .fragment_bit = true },
+            .Vertex => vk.ShaderStageFlags{ .vertex_bit = true },
+            .Compute => vk.ShaderStageFlags{ .compute_bit = true },
+        };
+    }
 
     module: vk.ShaderModule = .null_handle,
     pipeline_info: vk.PipelineShaderStageCreateInfo = undefined,
     pr_dev: *const vk.DeviceProxy = undefined,
 
+    pub fn initFromBytes(ctx: *const Context, bytes: []const u8, stage: Stage) !Module {
+        const dev: *const DeviceHandler = ctx.env(.dev);
+        const module = try dev.pr_dev.createShaderModule(&.{
+            .code_size = bytes.len,
+            .p_code = @as([*]const u32, @alignCast(@ptrCast(bytes.ptr))),
+        }, null);
+
+        const pipeline_info = vk.PipelineShaderStageCreateInfo{
+            .stage = toShaderStageFlags(stage),
+            .module = module,
+            .p_name = "main",
+        };
+
+        return Module{
+            .module = module,
+            .pipeline_info = pipeline_info,
+            .pr_dev = &dev.pr_dev,
+        };
+    }
+
     pub fn fromSourceFile(
         ctx: *const Context,
         alloc: Allocator,
-        config: Config,
+        filename: []const u8,
+        stage: Stage,
     ) !Module {
-        const dev: *const DeviceHandler = ctx.env(.dev);
         var arena = std.heap.ArenaAllocator.init(alloc);
 
         defer arena.deinit();
         const allocator = arena.allocator();
 
         const compilation_result = rshc.compileShaderAlloc(
-            config.filename,
-            config.stage,
+            filename,
+            stage,
             allocator,
         );
 
@@ -53,7 +69,7 @@ pub const Module = struct {
                     val.status,
                     val.message orelse "Unknown",
                 });
-                break :fail &[0]u8{};
+                break :fail &.{};
             }
         };
 
@@ -61,22 +77,16 @@ pub const Module = struct {
             return error.ShaderCompilationError;
         }
 
-        const module = try dev.pr_dev.createShaderModule(&.{
-            .code_size = compiled_bytes.len,
-            .p_code = @alignCast(@ptrCast(compiled_bytes.ptr)),
-        }, null);
+        if (@rem(compiled_bytes.len, @sizeOf(u32)) != 0) {
+            log.warn("Warning: SPIR-V bytes for {s} do not meet alignment requirements (off by {d})", .{
+                filename,
+                @rem(compiled_bytes.len, @sizeOf(u32)),
+            });
+        }
 
-        const pipeline_info = vk.PipelineShaderStageCreateInfo{
-            .stage = toShaderStageFlags(config.stage),
-            .module = module,
-            .p_name = "main",
-        };
+        log.debug("succesfully compiled shader", .{});
 
-        return Module{
-            .module = module,
-            .pipeline_info = pipeline_info,
-            .pr_dev = &dev.pr_dev,
-        };
+        return initFromBytes(ctx, compiled_bytes, stage);
     }
 
     pub fn deinit(self: *const Module) void {

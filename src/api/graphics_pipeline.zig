@@ -24,7 +24,7 @@ pub const FixedFunctionState = struct {
     ///
     /// Deez nuts must be enabled
     pub const Config = struct {
-        dynamic_states: ?[]const vk.DynamicState,
+        dynamic_states: []const vk.DynamicState = &.{},
         viewport: union(enum) {
             Swapchain: *const Swapchain, // create viewport from swapchain
             Direct: struct { // specify fixed function viewport directly
@@ -32,8 +32,8 @@ pub const FixedFunctionState = struct {
                 scissor: vk.Rect2D,
             },
         },
-        vertex_binding: vk.VertexInputBindingDescription,
-        vertex_attribs: []const vk.VertexInputAttributeDescription,
+        vertex_binding: ?vk.VertexInputBindingDescription = null,
+        vertex_attribs: []const vk.VertexInputAttributeDescription = &.{},
         descriptors: []const vk.DescriptorSetLayout,
         deez_nuts: bool = true,
     };
@@ -63,7 +63,7 @@ pub const FixedFunctionState = struct {
 
         self.pr_dev = ctx.env(.di);
 
-        const dynamic_states = config.dynamic_states orelse util.emptySlice(vk.DynamicState);
+        const dynamic_states = config.dynamic_states;
 
         self.dynamic_states = vk.PipelineDynamicStateCreateInfo{
             .dynamic_state_count = @intCast(dynamic_states.len),
@@ -72,10 +72,10 @@ pub const FixedFunctionState = struct {
 
         self.vertex_input = vk.PipelineVertexInputStateCreateInfo{
             .vertex_binding_description_count = 1,
-            .p_vertex_binding_descriptions = util.asManyPtr(
+            .p_vertex_binding_descriptions = if (config.vertex_binding) |vb| util.asManyPtr(
                 vk.VertexInputBindingDescription,
-                &config.vertex_binding,
-            ),
+                &vb,
+            ) else null,
             .vertex_attribute_description_count = @intCast(config.vertex_attribs.len),
             .p_vertex_attribute_descriptions = config.vertex_attribs.ptr,
         };
@@ -232,7 +232,7 @@ pr_dev: *const vk.DeviceProxy,
 viewport_info: vk.Viewport,
 scissor_info: vk.Rect2D,
 
-pub fn init(ctx: *const Context, config: *const PipelineConfig, allocator: Allocator) !Self {
+pub fn init(ctx: *const Context, config: PipelineConfig, allocator: Allocator) !Self {
     const dev: *const DeviceHandler = ctx.env(.dev);
     const pipeline_layout = dev.pr_dev.createPipelineLayout(
         &config.fixed_functions.pipeline_layout_info,

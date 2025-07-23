@@ -34,6 +34,7 @@ h_swapchain: vk.SwapchainKHR = undefined,
 pr_dev: *const vk.DeviceProxy = undefined,
 images: []ImageInfo = util.emptySlice(ImageInfo),
 allocator: Allocator,
+image_index: u32 = 0,
 
 fn chooseSurfaceFormat(
     available: []const vk.SurfaceFormatKHR,
@@ -100,8 +101,10 @@ fn choosePresentMode(
         }
     }
 
-    log.debug("Chosen fallback present mode: {s}", .{@tagName(.immediate_khr)});
-    return chosen_mode orelse .immediate_khr;
+    return chosen_mode orelse fb: {
+        log.debug("Chosen fallback present mode: {s}", .{@tagName(.immediate_khr)});
+        break :fb .immediate_khr;
+    };
 }
 
 fn createImageViews(self: *Self) !void {
@@ -247,7 +250,7 @@ pub fn deinit(self: *const Self) void {
     self.pr_dev.destroySwapchainKHR(self.h_swapchain, null);
 }
 
-pub fn getNextImage(self: *const Self, sem_signal: ?vk.Semaphore, fence_signal: ?vk.Fence) !u32 {
+pub fn getNextImage(self: *Self, sem_signal: ?vk.Semaphore, fence_signal: ?vk.Fence) !u32 {
     const res = try self.pr_dev.acquireNextImageKHR(
         self.h_swapchain,
         std.math.maxInt(u64),
@@ -255,5 +258,6 @@ pub fn getNextImage(self: *const Self, sem_signal: ?vk.Semaphore, fence_signal: 
         fence_signal orelse .null_handle,
     );
 
+    self.image_index = res.image_index;
     return res.image_index;
 }
