@@ -8,7 +8,7 @@ const ray = @import("ray");
 const math = ray.math;
 const api = ray.api;
 
-const helpers = @import("common/helpers.zig");
+const helpers = @import("helpers");
 const util = ray.util;
 
 const span = util.span;
