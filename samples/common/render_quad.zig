@@ -19,7 +19,6 @@ const FrameBuffer = api.FrameBuffer;
 
 const Swapchain = api.Swapchain;
 
-desc: Descriptor = undefined,
 pipeline: GraphicsPipeline = undefined,
 renderpass: RenderPass = undefined,
 dev: *const DeviceHandler = undefined,
@@ -56,7 +55,12 @@ pub const Config = struct {
 };
 
 pub fn initSelf(self: *Self, ctx: *const Context, allocator: Allocator, config: Config) !void {
-    const vert_shader = try ShaderModule.initFromBytes(ctx, hardcoded_vert_src, .Vertex);
+    const vert_shader = try ShaderModule.initFromSrc(
+        ctx,
+        allocator,
+        hardcoded_vert_src,
+        .Vertex,
+    );
     defer vert_shader.deinit();
 
     const shaders: []const ShaderModule = &.{
@@ -114,5 +118,4 @@ pub fn drawOneShot(self: *const Self, cmd_buf: *const CommandBuffer, framebuffer
 pub fn deinit(self: *Self) void {
     self.pipeline.deinit();
     self.renderpass.deinit();
-    self.desc.deinit();
 }

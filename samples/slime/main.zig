@@ -109,6 +109,7 @@ const SampleState = struct {
                 .format = .r8g8b8a8_srgb,
             },
         });
+
     }
 
     pub fn retrieveDeviceQueues(self: *SampleState) !void {
@@ -131,6 +132,12 @@ const SampleState = struct {
             .swapchain = &self.swapchain,
         });
 
+        self.graphics.framebuffers = try FrameBuffer.initAlloc(self.ctx, self.allocator, .{
+            .depth_view = null,
+            .swapchain = &self.swapchain,
+            .renderpass = &self.graphics.render_quad.renderpass,
+        });
+
         self.graphics.cmd_buf = try CommandBuffer.init(self.ctx);
     }
 
@@ -141,6 +148,8 @@ const SampleState = struct {
     // intercepts errors and logs them
     pub fn update(self: *SampleState) !void {
         glfw.pollEvents();
+
+        try self.graphics.cmd_buf.reset();
         try self.graphics.cmd_buf.begin();
         self.graphics.render_quad.drawOneShot(
             &self.graphics.cmd_buf,
@@ -169,6 +178,7 @@ pub fn main() !void {
     };
 
     try state.createContext();
+    try state.retrieveDeviceQueues();
     try state.createSwapchain();
     try state.createGraphicsPipeline();
     state.window.show();
