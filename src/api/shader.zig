@@ -9,9 +9,10 @@ const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.shader);
 
 const DeviceHandler = @import("base.zig").DeviceHandler;
+const Compiler = rshc.ShaderCompiler;
 
 pub const Module = struct {
-    pub const Stage = rshc.Stage;
+    pub const Stage = Compiler.Stage;
 
     fn toShaderStageFlags(stage: Stage) vk.ShaderStageFlags {
         return switch (stage) {
@@ -25,6 +26,27 @@ pub const Module = struct {
     pipeline_info: vk.PipelineShaderStageCreateInfo = undefined,
     pr_dev: *const vk.DeviceProxy = undefined,
 
+    pub fn initFromSrc(ctx: *const Context, allocator: Allocator, src: []const u8, stage: Stage) !Module {
+        var compiler = try Compiler.init(allocator);
+        defer compiler.deinit();
+
+        const res = compiler.fromSrc(src, stage);
+
+        return switch(res) {
+            .Success => |bytes| initFromBytes(ctx, bytes, stage),
+            .Failure => |v| fb: {
+                log.err("An error occured while compiling the shader: {!}\nMessage: {s}", .{
+                    v.status,
+                    v.message orelse "(no message)"
+                });
+
+                break :fb v.status;
+            }
+        };
+    }
+
+    /// Directly initialize from compiled SPIRV binaries 
+    /// (not to be confused with source strings)
     pub fn initFromBytes(ctx: *const Context, bytes: []const u8, stage: Stage) !Module {
         const dev: *const DeviceHandler = ctx.env(.dev);
         const module = try dev.pr_dev.createShaderModule(&.{
@@ -55,11 +77,12 @@ pub const Module = struct {
 
         defer arena.deinit();
         const allocator = arena.allocator();
+        var compiler = try Compiler.init(allocator);
+        defer compiler.deinit();
 
-        const compilation_result = rshc.compileShaderAlloc(
+        const compilation_result = compiler.fromFile(
             filename,
             stage,
-            allocator,
         );
 
         const compiled_bytes: []const u8 = switch (compilation_result) {
@@ -83,6 +106,7 @@ pub const Module = struct {
                 @rem(compiled_bytes.len, @sizeOf(u32)),
             });
         }
+        log.debug("SPIRV bytes size: {d}", .{compiled_bytes.len});
 
         log.debug("succesfully compiled shader", .{});
 
