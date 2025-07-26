@@ -24,6 +24,9 @@ const Descriptor = api.Descriptor;
 const DescriptorBinding = api.ResolvedDescriptorBinding;
 const CommandBuffer = api.CommandBuffer;
 
+const Semaphore = api.Semaphore;
+const Fence = api.Fence;
+
 const GraphicsQueue = api.GraphicsQueue;
 const PresentQueue = api.PresentQueue;
 
@@ -79,6 +82,18 @@ const GPUState = struct {
     //particles: StorageBuffer,
 };
 
+const SyncState = struct {
+    sem_render: Semaphore,
+    sem_acquire_frame: Semaphore,
+    frame_fence: Fence,
+
+    pub fn deinit(self: *const SyncState) void {
+        self.sem_render.deinit();
+        self.sem_acquire_frame.deinit();
+        self.frame_fence.deinit();
+    }
+};
+
 const SampleState = struct {
     ctx: *Context = undefined,
     swapchain: Swapchain = undefined,
@@ -88,8 +103,7 @@ const SampleState = struct {
     graphics: GraphicsState = undefined,
     gpu_state: GPUState = undefined,
 
-    present_queue: PresentQueue = undefined,
-    graphics_queue: GraphicsQueue = undefined,
+    sync: SyncState = undefined,
 
     pub fn createContext(self: *SampleState) !void {
         self.window = try helpers.makeBasicWindow(900, 600, "BAD APPLE >:}");
@@ -109,12 +123,6 @@ const SampleState = struct {
                 .format = .r8g8b8a8_srgb,
             },
         });
-
-    }
-
-    pub fn retrieveDeviceQueues(self: *SampleState) !void {
-        self.graphics_queue = try api.GraphicsQueue.init(self.ctx);
-        self.present_queue = try api.PresentQueue.init(self.ctx);
     }
 
     pub fn createGraphicsPipeline(self: *SampleState) !void {
@@ -141,6 +149,12 @@ const SampleState = struct {
         self.graphics.cmd_buf = try CommandBuffer.init(self.ctx);
     }
 
+    pub fn createSyncObjects(self: *SampleState) !void {
+        self.sync.frame_fence = try Fence.init(self.ctx, true);
+        self.sync.sem_acquire_frame = try Semaphore.init(self.ctx);
+        self.sync.sem_render = try Semaphore.init(self.ctx);
+    }
+
     pub fn active(self: *const SampleState) bool {
         return !self.window.shouldClose();
     }
@@ -148,6 +162,12 @@ const SampleState = struct {
     // intercepts errors and logs them
     pub fn update(self: *SampleState) !void {
         glfw.pollEvents();
+
+        // wait for v
+        try self.sync.frame_fence.wait();
+        try self.sync.frame_fence.reset();
+
+        _ = try self.swapchain.getNextImage(self.sync.sem_acquire_frame.h_sem, null);
 
         try self.graphics.cmd_buf.reset();
         try self.graphics.cmd_buf.begin();
@@ -157,12 +177,27 @@ const SampleState = struct {
         );
 
         try self.graphics.cmd_buf.end();
+
+        // submit the command buffer to a synchronized queue
+        try self.ctx.submitCommands(&self.graphics.cmd_buf, .Graphics, .{
+            .fence_wait = self.sync.frame_fence.h_fence,
+            .sem_sig = self.sync.sem_render.h_sem,
+            .sem_wait = self.sync.sem_acquire_frame.h_sem,
+        });
+
+        try self.ctx.presentFrame(&self.swapchain, .{
+            .sem_wait = self.sync.sem_render.h_sem,
+        });
     }
 
     pub fn deinit(self: *SampleState) void {
+        self.ctx.dev.waitIdle() catch {};
+
         self.graphics.deinit();
 
         self.swapchain.deinit();
+
+        self.sync.deinit();
         self.ctx.deinit();
         self.window.destroy();
     }
@@ -178,13 +213,18 @@ pub fn main() !void {
     };
 
     try state.createContext();
-    try state.retrieveDeviceQueues();
+    try state.createSyncObjects();
     try state.createSwapchain();
     try state.createGraphicsPipeline();
     state.window.show();
 
     while (state.active()) {
-        try state.update();
+        state.update() catch |err| {
+            log.err("An error occured while running: {!}\n    ....Terminating", .{err});
+            state.deinit();
+
+            return err;
+        };
     }
 
     state.deinit();

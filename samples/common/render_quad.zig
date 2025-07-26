@@ -38,11 +38,15 @@ const hardcoded_vert_src: []const u8 =
     \\     vec2(1.0, 1.0),
     \\     vec2(0.0, 1.0)
     \\);
+    \\ uint ind[6] = uint[](
+    \\     0, 1, 2, 0, 2, 3
+    \\);
     \\ layout(location = 0) out vec2 texCoord;
     \\
     \\ void main() {
-    \\     gl_Position = vec4(verts[gl_VertexIndex], 0.0, 1.0);
-    \\     texCoord = uvs[gl_VertexIndex];
+    \\     uint index = ind[gl_VertexIndex];
+    \\     gl_Position = vec4(verts[index], 0.0, 1.0);
+    \\     texCoord = uvs[index];
     \\ }
 ;
 
@@ -111,7 +115,7 @@ pub fn drawOneShot(self: *const Self, cmd_buf: *const CommandBuffer, framebuffer
     self.pipeline.bind(cmd_buf);
     const image_index = self.swapchain.image_index;
     self.renderpass.begin(cmd_buf, framebuffer, image_index);
-    self.dev.draw(cmd_buf, 4, 0, 0, 0);
+    self.dev.draw(cmd_buf, 6, 1, 0, 0);
     self.renderpass.end(cmd_buf);
 }
 
