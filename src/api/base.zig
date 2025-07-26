@@ -4,10 +4,12 @@ const vk = @import("vulkan");
 const std = @import("std");
 const glfw = @import("glfw");
 const util = @import("../util.zig");
+const api = @import("api.zig");
 
 const Allocator = std.mem.Allocator;
 
-const QueueFamily = @import("queue.zig").QueueFamily;
+const QueueType = api.QueueType;
+const Queue = api.ComputeQueue;
 const CommandBuffer = @import("command_buffer.zig");
 
 pub const GetProcAddrHandler = *const (fn (
@@ -323,6 +325,9 @@ pub const DeviceHandler = struct {
     }
 
     ctx: *const InstanceHandler,
+
+    // TODO: Support overlap in queue families
+    // (i.e) some queues might support both compute and graphics operations
     families: FamilyIndices,
     swapchain_details: SwapchainSupportDetails,
 
@@ -374,6 +379,7 @@ pub const DeviceHandler = struct {
         var found_indices: FamilyIndices = .{
             .graphics_family = null,
             .present_family = null,
+            .compute_family = null,
         };
 
         const dev_queue_family_props =
@@ -391,6 +397,11 @@ pub const DeviceHandler = struct {
                 .graphics_bit = true,
             })) {
                 found_indices.graphics_family = i;
+            }
+            if (props.queue_flags.contains(.{
+                .compute_bit = true,
+            })) {
+                found_indices.compute_family = i;
             }
 
             if ((pr_inst.getPhysicalDeviceSurfaceSupportKHR(
@@ -414,7 +425,6 @@ pub const DeviceHandler = struct {
         _ = ctx;
         return if (a.val < b.val) .lt else if (a.val > b.val) .gt else .eq;
     }
-    
 
     //HACK: Since most modern GPUS are all but guarunteed to support what I'm doing,
     //I'm just going to pick the first discrete GPU and call it a day...
@@ -554,14 +564,18 @@ pub const DeviceHandler = struct {
         return self.ctx.pr_inst.getPhysicalDeviceMemoryProperties(self.h_pdev);
     }
 
-    pub fn getQueueHandle(self: *const DeviceHandler, family: QueueFamily) ?vk.Queue {
-        const family_index = switch (family) {
+    pub fn getQueue(
+        self: *const DeviceHandler,
+        comptime family: QueueType,
+    ) ?api.GenericQueue(family) {
+        const index = switch (family) {
             .Graphics => self.families.graphics_family orelse return null,
-            .Present => self.families.present_family orelse return null,
             .Compute => self.families.compute_family orelse return null,
+            .Present => self.families.present_family orelse return null,
         };
 
-        return self.pr_dev.getDeviceQueue(family_index, 0);
+        const handle = self.pr_dev.getDeviceQueue(index, 0);
+        return api.GenericQueue(family).fromHandle(self, handle);
     }
 
     pub fn draw(

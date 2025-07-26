@@ -41,7 +41,6 @@ fn initDev(dev: *const DeviceHandler) !Self {
         .h_cmd_pool = dev.h_cmd_pool,
         .dev = dev,
     };
-
 }
 
 pub fn oneShot(dev: *const DeviceHandler) !Self {
@@ -77,11 +76,12 @@ pub fn end(self: *const Self) !void {
     // Also, synchronization is not gonna be handled yet...
     // the best way to handle synchronization is to only do 1 thing at a time 😊
     // (by waiting idle)
-    
+
     // We need queue handles from the context straight up, no way around it ugh
     // this shit is too bad to handle otherwise
     if (self.one_shot) {
-        const submit_queue = try GraphicsQueue.initDev(self.dev);
+        const submit_queue = self.dev.getQueue(.Graphics) orelse
+            return error.OneShotSubmitFailed;
         try submit_queue.submit(self, null, null, null);
         submit_queue.waitIdle();
     }

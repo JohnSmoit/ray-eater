@@ -25,26 +25,16 @@ pub fn GenericQueue(comptime p_family: QueueFamily) type {
         h_queue: vk.Queue,
         pr_dev: *const vk.DeviceProxy,
 
-        pub fn initDev(dev: *const DeviceHandler) !Self {
-            const queue_handle: vk.Queue = dev.getQueueHandle(family) orelse {
-                log.debug("Failed to acquire Queue handle", .{});
-                return error.MissingQueueHandle;
-            };
 
+        pub fn fromHandle(dev: *const DeviceHandler, h: vk.Queue) Self {
             return .{
-                .h_queue = queue_handle,
+                .h_queue = h,
                 .pr_dev = &dev.pr_dev,
             };
-        }
+        } 
 
-        pub fn init(ctx: *const Context) !Self {
-            const dev: *const DeviceHandler = ctx.env(.dev);
-            return initDev(dev);
-        }
 
         pub fn deinit(self: *Self) void {
-            // TODO: Annihilate queue
-
             _ = self;
         }
 

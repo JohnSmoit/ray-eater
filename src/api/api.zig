@@ -2,6 +2,7 @@ pub const vk = @import("vulkan");
 
 const base = @import("base.zig");
 const queue = @import("queue.zig");
+const sync = @import("sync.zig");
 const buf = @import("buffer.zig");
 const ind_buf = @import("index_buffer.zig");
 const sh = @import("shader.zig");
@@ -12,8 +13,6 @@ const vert_buf = @import("vertex_buffer.zig");
 pub const GlobalInterface = vk.BaseWrapper;
 pub const InstanceInterface = vk.InstanceProxy;
 pub const DeviceInterface = vk.DeviceProxy;
-pub const Semaphore = vk.Semaphore;
-pub const Fence = vk.Fence;
 pub const DynamicState = vk.DynamicState;
 
 /// All registered extensions for devices and instances
@@ -26,6 +25,8 @@ pub const SurfaceHandler = base.SurfaceHandler;
 pub const GraphicsQueue = queue.GraphicsQueue;
 pub const ComputeQueue = queue.ComputeQueue;
 pub const PresentQueue = queue.PresentQueue;
+pub const GenericQueue = queue.GenericQueue;
+pub const QueueType = queue.QueueFamily;
 
 pub const Swapchain = @import("swapchain.zig");
 pub const FrameBuffer = @import("frame_buffer.zig");
@@ -51,6 +52,10 @@ pub const BufInterface = buf.AnyBuffer;
 pub const Descriptor = @import("descriptor.zig");
 pub const ResolvedDescriptorBinding = Descriptor.ResolvedBinding;
 
+// sync stuff
+pub const Semaphore = sync.Semaphore;
+pub const Fence = sync.Fence;
 
 // shaders
 pub const ShaderModule = sh.Module;
+

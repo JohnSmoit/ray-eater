@@ -1,6 +1,6 @@
 const std = @import("std");
 const api = @import("api/api.zig");
-
+const vk = @import("vulkan");
 const glfw = @import("glfw");
 
 const e = @import("env.zig");
@@ -11,11 +11,14 @@ const ExtensionNameList = std.ArrayList([*:0]const u8);
 const Device = api.DeviceHandler;
 const Instance = api.InstanceHandler;
 const Surface = api.SurfaceHandler;
+const CommandBuffer = api.CommandBuffer;
+const Swapchain = api.Swapchain;
+
+const QueueType = api.QueueType;
 
 const GlobalInterface = api.GlobalInterface;
 const InstanceInterface = api.InstanceInterface;
 const DeviceInterface = api.DeviceInterface;
-const VulkanAPI = api.VulkanAPI;
 
 const Ref = e.Ref;
 const EnvBacking = struct {
@@ -40,6 +43,10 @@ surf: Surface,
 global_interface: *const GlobalInterface,
 inst_interface: *const InstanceInterface,
 dev_interface: *const DeviceInterface,
+
+graphics_queue: api.GraphicsQueue,
+present_queue: api.PresentQueue,
+compute_queue: api.ComputeQueue,
 
 // NOTE: Planning on centralizing the entire vulkan API into a single struct for better
 // management, but not needed for now
@@ -69,7 +76,7 @@ fn ResolveEnvType(comptime field: anytype) type {
 ///
 /// ## Extras
 /// * void -> entire environment (useful for scoping in API types)
-/// 
+///
 /// ## Usage Tips:
 /// * I STRONGLY recommend using manual type annotation if you want any hints from ZLS whatsoever
 ///   because zls doesn't really handle comptime stuff very well yet.
@@ -155,6 +162,11 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
         .surface = &new.surf,
     });
     errdefer new.dev.deinit();
+
+    new.compute_queue = new.dev.getQueue(.Compute) orelse return error.InvalidQueue;
+    new.graphics_queue = new.dev.getQueue(.Graphics) orelse return error.InvalidQueue;
+    new.present_queue = new.dev.getQueue(.Present) orelse return error.InvalidQueue;
+
     new.allocator = allocator;
 
     // link references together
@@ -175,4 +187,41 @@ pub fn deinit(self: *Self) void {
 
     const alloc = self.allocator;
     alloc.destroy(self);
+}
+
+pub const SyncInfo = struct {
+    fence_sig: ?vk.Fence = null,
+    fence_wait: ?vk.Fence = null,
+
+    sem_sig: ?vk.Semaphore = null,
+    sem_wait: ?vk.Semaphore = null,
+};
+
+pub fn submitCommands(
+    self: *Self,
+    cmd_buf: *const CommandBuffer,
+    comptime queue_family: QueueType,
+    sync: SyncInfo,
+) !void {
+    const queue = switch (queue_family) {
+        .Graphics => self.graphics_queue,
+        .Compute => self.present_queue,
+        .Present => self.present_queue,
+    };
+
+    try queue.submit(
+        cmd_buf,
+        sync.sem_wait,
+        sync.sem_sig,
+        sync.fence_wait,
+    );
+}
+
+pub fn presentFrame(
+    self: *Self,
+    swapchain: *const Swapchain,
+    sync: SyncInfo,
+) !void {
+    const image = swapchain.image_index;
+    try self.present_queue.present(swapchain, image, sync.sem_wait);
 }
