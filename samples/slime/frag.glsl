@@ -3,6 +3,15 @@
 layout(location = 0) out vec4 fragColor;
 layout(location = 0) in vec2 texCoord;
 
+layout(binding = 0) uniform SampleUniforms {
+    float time;
+    vec2 mouse;
+} uniforms;
+
 void main() {
-    fragColor = vec4(texCoord, 0.0, 1.0);
+    vec2 ot = vec2(
+        min(1.0, texCoord.x + sin(uniforms.time)),
+        min(1.0, texCoord.y + cos(uniforms.time))
+    );
+    fragColor = vec4(ot, 0.0, 1.0);
 }

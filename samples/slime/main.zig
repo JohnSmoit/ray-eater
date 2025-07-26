@@ -37,6 +37,7 @@ const Compute = api.Compute;
 const log = std.log.scoped(.application);
 
 const GraphicsState = struct {
+    descriptor: Descriptor,
     framebuffers: FrameBuffer,
     render_quad: RenderQuad,
 
@@ -52,11 +53,13 @@ const GraphicsState = struct {
         self.render_quad.deinit();
         self.framebuffers.deinit();
         self.cmd_buf.deinit();
+        self.descriptor.deinit();
     }
 };
 
 const ApplicationUniforms = extern struct {
     time: f32,
+    mouse: math.Vec2,
 };
 
 const GPUState = struct {
@@ -80,6 +83,10 @@ const GPUState = struct {
     // compute visible only
     // -- contains simulation agents
     //particles: StorageBuffer,
+    
+    pub fn deinit(self: *GPUState) void {
+        self.uniforms.buffer().deinit();
+    }
 };
 
 const SyncState = struct {
@@ -135,8 +142,28 @@ const SampleState = struct {
 
         defer frag_shader.deinit();
 
+        // initialize uniforms
+        self.gpu_state.host_uniforms = .{
+            .time = 0,
+            .mouse = math.vec(.{ 0, 0 }),
+        };
+
+        self.gpu_state.uniforms = try UniformBuffer(ApplicationUniforms)
+            .create(self.ctx);
+
+        try self.gpu_state.uniforms.buffer().setData(&self.gpu_state.host_uniforms);
+
+        // create fragment-specific descriptors
+        self.graphics.descriptor = try Descriptor.init(self.ctx, self.allocator, .{
+            .bindings = &.{.{
+                .data = .{ .Uniform = self.gpu_state.uniforms.buffer() },
+                .stages = .{ .fragment_bit = true },
+            }},
+        });
+
         try self.graphics.render_quad.initSelf(self.ctx, self.allocator, .{
             .frag_shader = &frag_shader,
+            .frag_descriptors = &self.graphics.descriptor,
             .swapchain = &self.swapchain,
         });
 
@@ -159,6 +186,11 @@ const SampleState = struct {
         return !self.window.shouldClose();
     }
 
+    fn updateUniforms(self: *SampleState) !void {
+        self.gpu_state.host_uniforms.time = @floatCast(glfw.getTime());
+        try self.gpu_state.uniforms.buffer().setData(&self.gpu_state.host_uniforms);
+    }
+
     // intercepts errors and logs them
     pub fn update(self: *SampleState) !void {
         glfw.pollEvents();
@@ -166,6 +198,8 @@ const SampleState = struct {
         // wait for v
         try self.sync.frame_fence.wait();
         try self.sync.frame_fence.reset();
+
+        try self.updateUniforms();
 
         _ = try self.swapchain.getNextImage(self.sync.sem_acquire_frame.h_sem, null);
 
@@ -194,6 +228,7 @@ const SampleState = struct {
         self.ctx.dev.waitIdle() catch {};
 
         self.graphics.deinit();
+        self.gpu_state.deinit();
 
         self.swapchain.deinit();
 

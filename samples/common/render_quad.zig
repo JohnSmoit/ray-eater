@@ -23,6 +23,7 @@ pipeline: GraphicsPipeline = undefined,
 renderpass: RenderPass = undefined,
 dev: *const DeviceHandler = undefined,
 swapchain: *const Swapchain = undefined,
+desc: ?*const Descriptor = null,
 
 const hardcoded_vert_src: []const u8 =
     \\ #version 450
@@ -109,12 +110,18 @@ pub fn initSelf(self: *Self, ctx: *const Context, allocator: Allocator, config: 
 
     self.dev = ctx.env(.dev);
     self.swapchain = config.swapchain;
+    self.desc = config.frag_descriptors;
 }
 
 pub fn drawOneShot(self: *const Self, cmd_buf: *const CommandBuffer, framebuffer: *const FrameBuffer) void {
     self.pipeline.bind(cmd_buf);
     const image_index = self.swapchain.image_index;
     self.renderpass.begin(cmd_buf, framebuffer, image_index);
+
+    if (self.desc) |d| {
+        d.bind(cmd_buf, self.pipeline.h_pipeline_layout);
+    }
+
     self.dev.draw(cmd_buf, 6, 1, 0, 0);
     self.renderpass.end(cmd_buf);
 }
