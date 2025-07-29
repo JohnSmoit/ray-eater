@@ -47,7 +47,8 @@ pub const TexImage = @import("texture.zig");
 pub const ComptimeVertexBuffer = vert_buf.VertexBuffer;
 pub const ComptimeIndexBuffer = ind_buf.IndexBuffer;
 pub const ComptimeUniformBuffer = uni_buf.UniformBuffer;
-pub const BufInterface = buf.AnyBuffer;
+pub const ComptimeStorageBuffer = @import("storage_buffer.zig").ComptimeStorageBuffer;
+const BufInterface = buf.AnyBuffer;
 
 pub const Descriptor = @import("descriptor.zig");
 pub const ResolvedDescriptorBinding = Descriptor.ResolvedBinding;

@@ -46,16 +46,16 @@ format: vk.Format = .undefined,
 pub const Config = struct {
     usage: vk.ImageUsageFlags,
     format: vk.Format,
-    tiling: vk.ImageTiling,
     mem_flags: vk.MemoryPropertyFlags,
     width: u32,
     height: u32,
+
+    tiling: vk.ImageTiling = .linear,
+    clear_col: ?vk.ClearColorValue = null,
     staging_buf: ?*StagingBuffer = null,
     initial_layout: vk.ImageLayout = .undefined,
 };
 
-// NOTE: Yet another instance of a BAD function that allocates device memory in a non-zig like fashion
-// -- memory allocator for device memory coming soon!
 fn createImageMemory(
     dev: *const DeviceHandler,
     img: vk.Image,
@@ -108,13 +108,45 @@ pub fn createView(self: *const Self, aspect_mask: vk.ImageAspectFlags) !View {
     };
 }
 
-pub fn transitionLayout(
+pub const AccessMapEntry = struct {
+    stage: vk.PipelineStageFlags = .{},
+    access: vk.AccessFlags = .{},
+};
+
+const transition_map = std.enums.EnumMap(vk.ImageLayout, AccessMapEntry).init(.{
+    .undefined = .{
+        .stage = .{ .top_of_pipe_bit = true },
+        .access = .{},
+    },
+    .general = .{
+        .stage = .{ .compute_shader_bit = true },
+        .access = .{},
+    },
+    .transfer_dst_optimal = .{
+        .stage = .{ .transfer_bit = true },
+        .access = .{ .transfer_write_bit = true },
+    },
+    .shader_read_only_optimal = .{
+        .stage = .{ .fragment_shader_bit = true },
+        .access = .{ .shader_read_bit = true },
+    },
+});
+
+pub const LayoutTransitionOptions = struct {
+    cmd_buf: ?*const CommandBuffer,
+    access_overrides: ?vk.AccessFlags,
+};
+
+/// injects a layout transition command into an existing command buffer
+/// barriers included.
+/// Command buffer MUST be specified in opts
+pub fn cmdTransitionLayout(
     self: *Self,
     from: vk.ImageLayout,
     to: vk.ImageLayout,
-) !void {
-    const transition_cmds = try CommandBuffer.oneShot(self.dev);
-    defer transition_cmds.deinit();
+    opts: LayoutTransitionOptions,
+) void {
+    const cmd_buf = opts.cmd_buf orelse return;
 
     var transition_barrier = vk.ImageMemoryBarrier{
         .old_layout = from,
@@ -150,46 +182,50 @@ pub fn transitionLayout(
     // as far as specifying the pipeline stages the barrier sits between, as well as which parts
     // of the resource should be accessed as the source and destination of the barrier transition
 
-    var src_stage = vk.PipelineStageFlags{}; // pipeline stage to happen before the barrier
-    var dst_stage = vk.PipelineStageFlags{}; // pipeline stage to happen after the barrier
+    const src_properties = transition_map.get(from) orelse .{};
+    const dst_properties = transition_map.get(to) orelse .{};
 
-    if (from == .undefined and to == .transfer_dst_optimal) {
-        // Technically, you could be implicit about this, since command buffers implicitly include
-        // a .host_write_bit when submitted, but that's yucky
-        transition_barrier.src_access_mask = .{};
-        transition_barrier.dst_access_mask = .{ .transfer_write_bit = true };
+    const src_access = opts.access_overrides orelse .{};
+    const dst_access = opts.access_overrides orelse .{};
 
-        src_stage = .{ .top_of_pipe_bit = true };
-        dst_stage = .{ .transfer_bit = true };
-    } else if (from == .transfer_dst_optimal and to == .shader_read_only_optimal) {
-        transition_barrier.src_access_mask = .{ .transfer_write_bit = true };
-        transition_barrier.dst_access_mask = .{ .shader_read_bit = true };
+    const default_src_access = (transition_map.get(from) orelse .{}).access;
+    const default_dst_access = (transition_map.get(to) orelse .{}).access;
 
-        src_stage = .{ .transfer_bit = true };
-        dst_stage = .{ .fragment_shader_bit = true };
-    } else {
-        log.err("Not a supported layout transition (This function is not generalized for all transitions)", .{});
-        return error.Fuck;
-    }
+    transition_barrier.src_access_mask = default_src_access.merge(src_access);
+    transition_barrier.src_access_mask = default_dst_access.merge(dst_access);
 
     self.dev.pr_dev.cmdPipelineBarrier(
-        transition_cmds.h_cmd_buffer,
-        src_stage,
-        dst_stage,
+        cmd_buf.h_cmd_buffer,
+        src_properties.stage,
+        dst_properties.stage,
         .{}, // allows for regional reading from the resource
         0,
         null,
         0,
         null,
         1,
-        //TODO: Priority Uno -- This many pointer function is really cumbersome
-        many(vk.ImageMemoryBarrier, &transition_barrier),
+        &.{&transition_barrier},
     );
+}
 
-    //TODO: one shot command buffers should auto submit when they end...
-    transition_cmds.end() catch |err| {
-        return err;
+/// opts command buffer is ignored if specified
+pub fn transitionLayout(
+    self: *Self,
+    from: vk.ImageLayout,
+    to: vk.ImageLayout,
+    opts: LayoutTransitionOptions,
+) !void {
+    const transition_cmds = try CommandBuffer.oneShot(self.dev);
+    defer transition_cmds.deinit();
+
+    const opts2 = LayoutTransitionOptions{
+        .access_overrides = opts.access_overrides,
+        .cmd_buf = transition_cmds,
     };
+
+    self.cmdTransitionLayout(from, to, opts2);
+
+    try transition_cmds.end();
 }
 
 fn copyFromStaging(self: *Self, staging_buf: *StagingBuffer, extent: vk.Extent3D) !void {
@@ -224,7 +260,29 @@ fn copyFromStaging(self: *Self, staging_buf: *StagingBuffer, extent: vk.Extent3D
     };
 }
 
-fn init_self(self: *Self, dev: *const DeviceHandler, config: *const Config) !void {
+pub fn cmdClear(
+    self: *Self,
+    col: vk.ClearColorValue,
+    cmd_buf: *const CommandBuffer,
+    cur_layout: vk.ImageLayout,
+) void {
+    self.dev.pr_dev.cmdClearColorImage(
+        cmd_buf,
+        self.h_img,
+        cur_layout,
+        &.{col},
+        1,
+        &.{.{
+            .aspect_mask = .{ .color_bit = true },
+            .base_array_layer = 0,
+            .layer_count = 1,
+            .base_mip_level = 0,
+            .level_count = 1,
+        }},
+    );
+}
+
+fn initSelf(self: *Self, dev: *const DeviceHandler, config: Config) !void {
     const image_info = vk.ImageCreateInfo{
         .image_type = .@"2d",
         .extent = .{
@@ -263,26 +321,41 @@ fn init_self(self: *Self, dev: *const DeviceHandler, config: *const Config) !voi
     // 2. Transition from TRANSFER_DST_OPTIMAL to SHADER_READ_ONLY_OPTIMAL to prepare the image to be used a sampler
     // (Which obviously is accessed as read only from the shader using the sampler as an intermediary)
 
-
     if (config.initial_layout == .undefined) {
         return;
     }
 
     if (config.staging_buf != null) {
-        try self.transitionLayout(.undefined, .transfer_dst_optimal);
+        try self.transitionLayout(.undefined, .transfer_dst_optimal, .{});
         try self.copyFromStaging(config.staging_buf.?, image_info.extent);
-        try self.transitionLayout(.transfer_dst_optimal, config.initial_layout);
+        try self.transitionLayout(.transfer_dst_optimal, config.initial_layout, .{});
     } else {
-        // NOTE: This disregards the fact that if a staging buffer is not used, then
+        // WARN: This disregards the fact that if a staging buffer is not used, then
         // the user is probably copying from host visible memory (not sure if this handles that
         // correctly)
-        try self.transitionLayout(.undefined, config.initial_layout);
+        const tmp_cmds = try CommandBuffer.oneShot();
+
+        if (config.clear_col) |col| {
+            self.cmdTransitionLayout(.undefined, .transfer_dst_optimal, .{
+                .cmd_buf = &tmp_cmds,
+            });
+            self.cmdClear(col, &tmp_cmds, .transfer_dst_optimal);
+            self.cmdTransitionLayout(.transfer_dst_optimal, config.initial_layout, .{
+                .cmd_buf = &tmp_cmds,
+            });
+        } else {
+            self.cmdTransitionLayout(.undefined, config.initial_layout, .{
+                .cmd_buf = &tmp_cmds,
+            });
+        }
+
+        try tmp_cmds.end();
     }
 }
 
-pub fn init(ctx: *const Context, config: *const Config) !Self {
+pub fn init(ctx: *const Context, config: Config) !Self {
     var image = Self{};
-    try image.init_self(ctx.env(.dev), config);
+    try image.initSelf(ctx.env(.dev), config);
 
     return image;
 }

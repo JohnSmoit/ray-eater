@@ -25,22 +25,6 @@ h_pipeline: vk.Pipeline,
 h_pipeline_layout: vk.PipelineLayout,
 desc: Descriptor,
 
-pub fn fromShaderFileAlloc(
-    ctx: *const Context,
-    allocator: Allocator,
-    path: []const u8,
-) !Self {
-    const shader = try ShaderModule.fromSourceFile(ctx, allocator, .{
-        .filename = path,
-        .stage = .Compute,
-    });
-    defer shader.deinit();
-
-    return init(ctx, .{
-        .shader = shader,
-    });
-}
-
 pub fn init(ctx: *const Context, allocator: Allocator, cfg: Config) !Self {
     const pr_dev: *const DeviceInterface = ctx.env(.di);
     const desc = try Descriptor.init(ctx, allocator, &.{
@@ -52,7 +36,7 @@ pub fn init(ctx: *const Context, allocator: Allocator, cfg: Config) !Self {
     const layout = try pr_dev.createPipelineLayout(&.{
         .flags = .{},
         .set_layout_count = 1,
-        .p_set_layouts = util.asManyPtr(vk.DescriptorSetLayout, &desc.h_desc_layout),
+        .p_set_layouts = &.{&desc.h_desc_layout},
     }, null);
 
     var new = Self{
@@ -71,10 +55,7 @@ pub fn init(ctx: *const Context, allocator: Allocator, cfg: Config) !Self {
     try pr_dev.createComputePipelines(
         .null_handle,
         1,
-        util.asManyPtr(
-            vk.ComputePipelineCreateInfo,
-            &compute_pipeline_info,
-        ),
+        &.{&compute_pipeline_info},
         null,
         @as([*]vk.Pipeline, @ptrCast(&new.h_pipeline)),
     );

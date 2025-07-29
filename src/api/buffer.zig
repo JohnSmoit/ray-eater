@@ -65,16 +65,46 @@ pub const AnyBuffer = struct {
 /// Ease-of-use mixins for creating opaque vtable functions
 /// TODO: make this
 
-pub fn BindMixin() BindFn {
+pub fn BindMixin(comptime T: type, val: ?*const (fn(*T, *const CommandBuffer) void)) BindFn {
+    const Wrapper = struct {
+        pub fn f(ctx: *anyopaque, cmd_buf: *const CommandBuffer) void {
+            const self: *T = @ptrCast(@alignCast(ctx));
+            if (val) |func| func(self, cmd_buf);
+        }
+    };
 
+    return Wrapper.f;
 }
 
-pub fn SetDataMixin() SetDataFn {
+pub fn SetDataMixin(comptime T: type, val: ?*const (fn(*T, *anyopaque) anyerror!void)) SetDataFn {
+    const Wrapper = struct {
+        pub fn f(ctx: *anyopaque, data: *anyopaque) anyerror!void {
+            const self: *T = @ptrCast(@alignCast(ctx));
+            if (val) |func| try func(self, data);
+        }
+    };
 
+    return Wrapper.f;
 }
 
-pub fn DeinitMixin() DeinitFn {
+pub fn DeinitMixin(comptime T: type, val: ?*const (fn(*T) void)) DeinitFn {
+    const Wrapper = struct {
+        pub fn f(ctx: *anyopaque) void {
+            const self: *T = @ptrCast(@alignCast(ctx));
+            if (val) |func| func(self);
+        }
+    };
 
+    return Wrapper.f;
+}
+
+pub fn AutoVTable(comptime T: type) *const VTable {
+    const info = @typeInfo(T);
+
+    const sinfo = switch(info) {
+        .Struct => |s| s,
+        else => @compileError("Invalid Vtable base type, must be struct"), 
+    };
 }
 
 pub fn copy(src: AnyBuffer, dst: AnyBuffer, dev: *const DeviceHandler) !void {
