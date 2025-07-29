@@ -45,6 +45,19 @@ pub const Vec3 = extern struct {
     }
 };
 
+pub const Vec4 = extern struct {
+    pub const len: usize = 4;
+
+    x: f32,
+    y: f32,
+    z: f32,
+    w: f32,
+
+    pub fn vals(self: Vec4) struct { f32, f32, f32, f32 } {
+        return .{ self.x, self.y, self.z, self.w };
+    }
+};
+
 pub const Vec2 = extern struct {
     pub const len: usize = 2;
 
@@ -60,6 +73,7 @@ fn resolveVec(args: comptime_int) type {
     return switch (args) {
         2 => Vec2,
         3 => Vec3,
+        4 => Vec4,
         else => @compileError("No corresponding vector type"),
     };
 }
@@ -70,6 +84,7 @@ pub fn vec(args: anytype) resolveVec(args.len) {
     return switch (args.len) {
         2 => Vec2{ .x = args[0], .y = args[1] },
         3 => Vec3{ .x = args[0], .y = args[1], .z = args[2] },
+        4 => Vec4{ .x = args[0], .y = args[1], .z = args[2], .w = args[3] },
         else => unreachable,
     };
 }
@@ -228,10 +243,10 @@ pub const Mat4 = extern struct {
 
     pub fn rotateY(mat: Mat4, rads: f32) Mat4 {
         return mat.mul(create(.{
-            .{@cos(rads), 0, @sin(rads), 0},
-            .{0, 1, 0, 0},
-            .{-@sin(rads), 0, @cos(rads), 0},
-            .{0, 0, 0, 1},
+            .{ @cos(rads), 0, @sin(rads), 0 },
+            .{ 0, 1, 0, 0 },
+            .{ -@sin(rads), 0, @cos(rads), 0 },
+            .{ 0, 0, 0, 1 },
         }));
     }
 
@@ -295,7 +310,7 @@ pub const Mat4 = extern struct {
         const ty = -dot(y, eye);
         const tz = -dot(z, eye);
 
-        return view.translate(vec(.{tx, ty, tz}));
+        return view.translate(vec(.{ tx, ty, tz }));
     }
 
     pub fn perspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
