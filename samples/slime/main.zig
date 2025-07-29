@@ -31,10 +31,20 @@ const GraphicsQueue = api.GraphicsQueue;
 const PresentQueue = api.PresentQueue;
 
 const UniformBuffer = api.ComptimeUniformBuffer;
+const StorageBuffer = api.ComptimeStorageBuffer;
 const TexImage = api.Image;
 const Compute = api.Compute;
 
 const log = std.log.scoped(.application);
+
+const ComputeState = struct {
+    // pipeline for running slime simulation
+    slime_pipeline: Compute,
+    // pipeline for updating pheremone map
+    stinky_pipeline: Compute,
+
+    cmd_buf: CommandBuffer,
+};
 
 const GraphicsState = struct {
     descriptor: Descriptor,
@@ -42,12 +52,6 @@ const GraphicsState = struct {
     render_quad: RenderQuad,
 
     cmd_buf: CommandBuffer,
-
-    // pipeline for running slime simulation
-    slime_pipeline: Compute,
-
-    // pipeline for updating pheremone map
-    stinky_pipeline: Compute,
 
     pub fn deinit(self: *GraphicsState) void {
         self.render_quad.deinit();
@@ -60,6 +64,10 @@ const GraphicsState = struct {
 const ApplicationUniforms = extern struct {
     time: f32,
     mouse: math.Vec2,
+};
+
+const Particle = extern struct {
+    position: math.Vec4,
 };
 
 const GPUState = struct {
@@ -82,8 +90,8 @@ const GPUState = struct {
 
     // compute visible only
     // -- contains simulation agents
-    //particles: StorageBuffer,
-    
+    particles: StorageBuffer(Particle),
+
     pub fn deinit(self: *GPUState) void {
         self.uniforms.buffer().deinit();
     }
@@ -108,6 +116,7 @@ const SampleState = struct {
     allocator: Allocator,
 
     graphics: GraphicsState = undefined,
+    compute: ComputeState = undefined,
     gpu_state: GPUState = undefined,
 
     sync: SyncState = undefined,
@@ -136,7 +145,7 @@ const SampleState = struct {
         const frag_shader = try helpers.initSampleShader(
             self.ctx,
             self.allocator,
-            "slime/frag.glsl",
+            "slime/shaders/frag.glsl",
             .Fragment,
         );
 
@@ -180,6 +189,38 @@ const SampleState = struct {
         self.sync.frame_fence = try Fence.init(self.ctx, true);
         self.sync.sem_acquire_frame = try Semaphore.init(self.ctx);
         self.sync.sem_render = try Semaphore.init(self.ctx);
+
+        //compute sync objects
+    }
+
+    pub fn createComputePipelines(self: *SampleState) !void {
+        self.compute.cmd_buf = try CommandBuffer.init(self.ctx);
+
+        const shader = try helpers.initSampleShader(
+            self.ctx,
+            self.allocator,
+            "slime/shaders/compute_slime.glsl",
+            .Compute,
+        );
+
+        const descriptors: []const DescriptorBinding = &.{
+            .{
+                .data = .{ .Uniform = self.gpu_state.compute_uniforms.buffer() },
+                .stages = .{ .compute_bit = true },
+            },
+            .{
+                .data = .{ .StorageBuffer = self.gpu_state.particles.buffer() },
+                .stages = .{ .compute_bit = true },
+            },
+            .{
+                .data = .{},
+                .stages = .{ .compute_bit = true },
+            },
+        };
+        self.compute.slime_pipeline = try Compute.init(self.ctx, self.allocator, .{
+            .shader = &shader,
+            .desc_bindings = descriptors,
+        });
     }
 
     pub fn active(self: *const SampleState) bool {
