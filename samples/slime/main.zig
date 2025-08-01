@@ -32,7 +32,7 @@ const PresentQueue = api.PresentQueue;
 
 const UniformBuffer = api.ComptimeUniformBuffer;
 const StorageBuffer = api.ComptimeStorageBuffer;
-const TexImage = api.Image;
+const Image = api.Image;
 const Compute = api.Compute;
 
 const log = std.log.scoped(.application);
@@ -44,6 +44,11 @@ const ComputeState = struct {
     stinky_pipeline: Compute,
 
     cmd_buf: CommandBuffer,
+
+    pub fn deinit(self: *ComputeState) void {
+        self.slime_pipeline.deinit();
+        self.cmd_buf.deinit();
+    }
 };
 
 const GraphicsState = struct {
@@ -66,6 +71,16 @@ const ApplicationUniforms = extern struct {
     mouse: math.Vec2,
 };
 
+const ComputeUniforms = extern struct {
+    col: math.Vec3,
+    res_x: u32,
+    res_y: u32,
+    particle_count: u32,
+    pixels_rad: u32,
+};
+
+const PARTICLE_COUNT = 1024;
+
 const Particle = extern struct {
     position: math.Vec4,
 };
@@ -75,6 +90,7 @@ const GPUState = struct {
 
     // compute and graphics visible
     uniforms: UniformBuffer(ApplicationUniforms),
+    compute_uniforms: UniformBuffer(ComputeUniforms),
 
     // compute and graphics visible (needs viewport quad)
     // written to in the compute shader and simply mapped to the viewport
@@ -82,18 +98,24 @@ const GPUState = struct {
     // ... This also represents the pheremone map that sim agents in the compute
     // shader would use to determine their movements
     //
-    render_target: TexImage,
+    render_target: Image,
+    render_view: Image.View,
 
     // compute visible only
     // (contains source image data to base simulation off of)
-    src_image: TexImage,
+    src_image: Image,
 
     // compute visible only
     // -- contains simulation agents
     particles: StorageBuffer(Particle),
 
     pub fn deinit(self: *GPUState) void {
+        self.particles.buffer().deinit();
         self.uniforms.buffer().deinit();
+        self.compute_uniforms.buffer().deinit();
+
+        self.render_view.deinit();
+        self.render_target.deinit();
     }
 };
 
@@ -202,6 +224,25 @@ const SampleState = struct {
             "slime/shaders/compute_slime.glsl",
             .Compute,
         );
+        defer shader.deinit();
+        // storage images
+        self.gpu_state.render_target = try Image.init(self.ctx, .{
+            .initial_layout = .general,
+            .format = .r8g8b8a8_snorm,
+            .tiling = .linear,
+            .extent = self.swapchain.extent,
+            .mem_flags = .{ .device_local_bit = true },
+            .usage = .{
+                .transfer_dst_bit = true,
+                .storage_bit = true,
+                .sampled_bit = true,
+            },
+            .clear_col = .{ .float_32 = .{ 0, 0, 0, 0 } },
+        });
+        self.gpu_state.render_view = try self.gpu_state.render_target.createView(.{.color_bit = true});
+
+        self.gpu_state.compute_uniforms = try UniformBuffer(ComputeUniforms).create(self.ctx);
+        self.gpu_state.particles = try StorageBuffer(Particle).create(self.ctx, PARTICLE_COUNT);
 
         const descriptors: []const DescriptorBinding = &.{
             .{
@@ -213,7 +254,10 @@ const SampleState = struct {
                 .stages = .{ .compute_bit = true },
             },
             .{
-                .data = .{},
+                .data = .{ .Image = .{
+                    .img = &self.gpu_state.render_target,
+                    .view = self.gpu_state.render_view.h_view,
+                } },
                 .stages = .{ .compute_bit = true },
             },
         };
@@ -221,6 +265,7 @@ const SampleState = struct {
             .shader = &shader,
             .desc_bindings = descriptors,
         });
+
     }
 
     pub fn active(self: *const SampleState) bool {
@@ -269,6 +314,7 @@ const SampleState = struct {
         self.ctx.dev.waitIdle() catch {};
 
         self.graphics.deinit();
+        self.compute.deinit();
         self.gpu_state.deinit();
 
         self.swapchain.deinit();
@@ -280,6 +326,7 @@ const SampleState = struct {
 };
 
 pub fn main() !void {
+    log.debug("LINK START", .{});
     const mem = try std.heap.page_allocator.alloc(u8, 1_000_024);
     defer std.heap.page_allocator.free(mem);
 
@@ -292,6 +339,8 @@ pub fn main() !void {
     try state.createSyncObjects();
     try state.createSwapchain();
     try state.createGraphicsPipeline();
+    try state.createComputePipelines();
+
     state.window.show();
 
     while (state.active()) {
