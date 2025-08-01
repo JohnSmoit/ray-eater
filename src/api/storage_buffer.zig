@@ -47,7 +47,7 @@ pub fn ComptimeStorageBuffer(comptime T: type) type {
                 cmd_buf.h_cmd_buffer,
                 0,
                 1,
-                &.{&self.buf.h_buf},
+                &.{self.buf.h_buf},
                 &.{0},
             );
         }

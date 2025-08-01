@@ -47,8 +47,7 @@ pub const Config = struct {
     usage: vk.ImageUsageFlags,
     format: vk.Format,
     mem_flags: vk.MemoryPropertyFlags,
-    width: u32,
-    height: u32,
+    extent: vk.Extent2D,
 
     tiling: vk.ImageTiling = .linear,
     clear_col: ?vk.ClearColorValue = null,
@@ -113,28 +112,42 @@ pub const AccessMapEntry = struct {
     access: vk.AccessFlags = .{},
 };
 
-const transition_map = std.enums.EnumMap(vk.ImageLayout, AccessMapEntry).init(.{
-    .undefined = .{
-        .stage = .{ .top_of_pipe_bit = true },
-        .access = .{},
-    },
-    .general = .{
-        .stage = .{ .compute_shader_bit = true },
-        .access = .{},
-    },
-    .transfer_dst_optimal = .{
-        .stage = .{ .transfer_bit = true },
-        .access = .{ .transfer_write_bit = true },
-    },
-    .shader_read_only_optimal = .{
-        .stage = .{ .fragment_shader_bit = true },
-        .access = .{ .shader_read_bit = true },
-    },
-});
+//NOTE: Unfortunately, vulkan enums (maybe also c enums in general)
+// are too fat to work with the standard library's
+// enum map (the compiler runs out of memory trying to allocate a 4-billion bit bitset
+// along with a 4-billion entry array of my AccessMapEntry structs)
+// probably worth looking into a static hashmap that works off of a predefined range of key-value
+// entries and doesn't need allocation
+
+fn getTransitionParams(layout: vk.ImageLayout) AccessMapEntry {
+    return switch (layout) {
+        .undefined => .{
+            .stage = .{ .top_of_pipe_bit = true },
+            .access = .{},
+        },
+        .general => .{
+            .stage = .{ .compute_shader_bit = true },
+            .access = .{},
+        },
+        .transfer_dst_optimal => .{
+            .stage = .{ .transfer_bit = true },
+            .access = .{ .transfer_write_bit = true },
+        },
+        .shader_read_only_optimal => .{
+            .stage = .{ .fragment_shader_bit = true },
+            .access = .{ .shader_read_bit = true },
+        },
+        else => extra: {
+            log.warn("Invalid transition combination specified", .{});
+            break :extra .{};
+        },
+    };
+}
 
 pub const LayoutTransitionOptions = struct {
-    cmd_buf: ?*const CommandBuffer,
-    access_overrides: ?vk.AccessFlags,
+    cmd_buf: ?*const CommandBuffer = null,
+    src_access_overrides: vk.AccessFlags = .{},
+    dst_access_overrides: vk.AccessFlags = .{},
 };
 
 /// injects a layout transition command into an existing command buffer
@@ -182,17 +195,19 @@ pub fn cmdTransitionLayout(
     // as far as specifying the pipeline stages the barrier sits between, as well as which parts
     // of the resource should be accessed as the source and destination of the barrier transition
 
-    const src_properties = transition_map.get(from) orelse .{};
-    const dst_properties = transition_map.get(to) orelse .{};
+    const src_properties: AccessMapEntry = getTransitionParams(from);
+    const dst_properties: AccessMapEntry = getTransitionParams(to);
 
-    const src_access = opts.access_overrides orelse .{};
-    const dst_access = opts.access_overrides orelse .{};
+    const default_src_access: vk.AccessFlags = src_properties.access;
+    const default_dst_access: vk.AccessFlags = dst_properties.access;
 
-    const default_src_access = (transition_map.get(from) orelse .{}).access;
-    const default_dst_access = (transition_map.get(to) orelse .{}).access;
+    transition_barrier.src_access_mask =
+        default_src_access.merge(opts.src_access_overrides);
+    transition_barrier.dst_access_mask =
+        default_dst_access.merge(opts.dst_access_overrides);
 
-    transition_barrier.src_access_mask = default_src_access.merge(src_access);
-    transition_barrier.src_access_mask = default_dst_access.merge(dst_access);
+    log.debug("src access: {s}", .{transition_barrier.src_access_mask}); 
+    log.debug("dst access: {s}", .{transition_barrier.dst_access_mask}); 
 
     self.dev.pr_dev.cmdPipelineBarrier(
         cmd_buf.h_cmd_buffer,
@@ -204,7 +219,7 @@ pub fn cmdTransitionLayout(
         0,
         null,
         1,
-        &.{&transition_barrier},
+        &.{transition_barrier},
     );
 }
 
@@ -219,8 +234,9 @@ pub fn transitionLayout(
     defer transition_cmds.deinit();
 
     const opts2 = LayoutTransitionOptions{
-        .access_overrides = opts.access_overrides,
-        .cmd_buf = transition_cmds,
+        .src_access_overrides = opts.src_access_overrides,
+        .dst_access_overrides = opts.dst_access_overrides,
+        .cmd_buf = &transition_cmds,
     };
 
     self.cmdTransitionLayout(from, to, opts2);
@@ -267,10 +283,10 @@ pub fn cmdClear(
     cur_layout: vk.ImageLayout,
 ) void {
     self.dev.pr_dev.cmdClearColorImage(
-        cmd_buf,
+        cmd_buf.h_cmd_buffer,
         self.h_img,
         cur_layout,
-        &.{col},
+        &col,
         1,
         &.{.{
             .aspect_mask = .{ .color_bit = true },
@@ -286,8 +302,8 @@ fn initSelf(self: *Self, dev: *const DeviceHandler, config: Config) !void {
     const image_info = vk.ImageCreateInfo{
         .image_type = .@"2d",
         .extent = .{
-            .width = config.width,
-            .height = config.height,
+            .width = config.extent.width,
+            .height = config.extent.height,
             .depth = 1,
         },
         .mip_levels = 1,
@@ -333,7 +349,7 @@ fn initSelf(self: *Self, dev: *const DeviceHandler, config: Config) !void {
         // WARN: This disregards the fact that if a staging buffer is not used, then
         // the user is probably copying from host visible memory (not sure if this handles that
         // correctly)
-        const tmp_cmds = try CommandBuffer.oneShot();
+        const tmp_cmds = try CommandBuffer.oneShot(self.dev);
 
         if (config.clear_col) |col| {
             self.cmdTransitionLayout(.undefined, .transfer_dst_optimal, .{
@@ -357,6 +373,7 @@ pub fn init(ctx: *const Context, config: Config) !Self {
     var image = Self{};
     try image.initSelf(ctx.env(.dev), config);
 
+    log.debug("successfully initiailized image", .{});
     return image;
 }
 

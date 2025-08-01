@@ -393,6 +393,8 @@ pub const DeviceHandler = struct {
 
         for (dev_queue_family_props, 0..) |props, index| {
             const i: u32 = @intCast(index);
+            log.debug("Family {d}, Supports:\n {s}", .{i, props.queue_flags});
+
             if (props.queue_flags.contains(.{
                 .graphics_bit = true,
             })) {
@@ -412,6 +414,18 @@ pub const DeviceHandler = struct {
                 found_indices.present_family = i;
             }
         }
+
+        log.debug(
+            \\The following queue indices support needed
+            \\families of operations:
+            \\  {?}: COMPUTE,
+            \\  {?}: GRAPHICS,
+            \\  {?}: PRESENT,
+        , .{
+            found_indices.compute_family,
+            found_indices.graphics_family,
+            found_indices.present_family,
+        });
 
         return found_indices;
     }

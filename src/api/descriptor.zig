@@ -19,6 +19,7 @@ const Context = @import("../context.zig");
 const AnyBuffer = buffer.AnyBuffer;
 
 const TexImage = @import("texture.zig");
+const Image = @import("image.zig");
 
 const log = std.log.scoped(.descriptor);
 
@@ -38,6 +39,7 @@ pub const DescriptorType = enum(u8) {
     Uniform,
     Sampler,
     StorageBuffer,
+    Image,
 };
 
 pub const ResolvedBinding = struct {
@@ -46,13 +48,18 @@ pub const ResolvedBinding = struct {
         Uniform: AnyBuffer,
         Sampler: *const TexImage,
         StorageBuffer: AnyBuffer,
+        Image: struct {
+            img: *const Image,
+            // caller is responsible for this for now
+            view: vk.ImageView,
+        },
     },
 };
 
 // flattened since buffers are the same regardless
 // of whether they be uniform or storage
 const BindingWriteInfo = union(enum) {
-    Sampler: vk.DescriptorImageInfo,
+    Image: vk.DescriptorImageInfo,
     Buffer: vk.DescriptorBufferInfo,
 };
 
@@ -89,6 +96,7 @@ fn resolveDescriptorLayout(
                 .Sampler => .combined_image_sampler,
                 .Uniform => .uniform_buffer,
                 .StorageBuffer => .storage_buffer,
+                .Image => .storage_image,
             },
         };
     }
@@ -131,23 +139,31 @@ fn updateDescriptorSets(
 
         switch (binding.data) {
             .Sampler => |tex| {
-                write_infos[index] = .{ .Sampler = vk.DescriptorImageInfo{
+                write_infos[index] = .{ .Image = vk.DescriptorImageInfo{
                     .image_layout = .read_only_optimal,
                     .image_view = tex.view.h_view,
                     .sampler = tex.h_sampler,
                 } };
 
                 writes[index].descriptor_type = .combined_image_sampler;
-                writes[index].p_image_info = many(
-                    vk.DescriptorImageInfo,
-                    &write_infos[index].Sampler,
-                );
+                writes[index].p_image_info = &.{write_infos[index].Image};
+            },
+            .Image => |img| {
+                write_infos[index] = .{ .Image = vk.DescriptorImageInfo{
+                    .image_layout = .general,
+                    .image_view = img.view,
+                    .sampler = .null_handle,
+                } };
+
+                writes[index].p_image_info = &.{write_infos[index].Image};
+                writes[index].descriptor_type = .storage_image;
+                
             },
             else => {
                 const buf: AnyBuffer, const dt: vk.DescriptorType = switch (binding.data) {
                     .Uniform => |buf| .{ buf, .uniform_buffer },
                     .StorageBuffer => |buf| .{ buf, .storage_buffer },
-                    .Sampler => unreachable,
+                    else => unreachable,
                 };
 
                 write_infos[index] = .{ .Buffer = vk.DescriptorBufferInfo{
@@ -254,7 +270,7 @@ pub fn update(self: *Self, index: usize, data: anytype) !void {
     switch (binding.data) {
         .Uniform => |buf| try buf.setData(data),
         .StorageBuffer => |buf| try buf.setData(data),
-        .Sampler => {
+        else => {
             log.err("Fuck (AKA no texture updating pretty please)", .{});
             return error.Unsupported;
         },

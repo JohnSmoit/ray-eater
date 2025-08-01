@@ -98,6 +98,7 @@ pub fn DeinitMixin(comptime T: type, val: ?*const (fn(*T) void)) DeinitFn {
     return Wrapper.f;
 }
 
+//TODO: Implement AUtoVTable
 pub fn AutoVTable(comptime T: type) *const VTable {
     const info = @typeInfo(T);
 
@@ -105,6 +106,10 @@ pub fn AutoVTable(comptime T: type) *const VTable {
         .Struct => |s| s,
         else => @compileError("Invalid Vtable base type, must be struct"), 
     };
+
+    _ = sinfo;
+
+    return undefined;
 }
 
 pub fn copy(src: AnyBuffer, dst: AnyBuffer, dev: *const DeviceHandler) !void {

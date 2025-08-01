@@ -27,7 +27,7 @@ desc: Descriptor,
 
 pub fn init(ctx: *const Context, allocator: Allocator, cfg: Config) !Self {
     const pr_dev: *const DeviceInterface = ctx.env(.di);
-    const desc = try Descriptor.init(ctx, allocator, &.{
+    var desc = try Descriptor.init(ctx, allocator, .{
         .bindings = cfg.desc_bindings,
     });
     errdefer desc.deinit();
@@ -36,7 +36,7 @@ pub fn init(ctx: *const Context, allocator: Allocator, cfg: Config) !Self {
     const layout = try pr_dev.createPipelineLayout(&.{
         .flags = .{},
         .set_layout_count = 1,
-        .p_set_layouts = &.{&desc.h_desc_layout},
+        .p_set_layouts = &.{desc.h_desc_layout},
     }, null);
 
     var new = Self{
@@ -47,15 +47,15 @@ pub fn init(ctx: *const Context, allocator: Allocator, cfg: Config) !Self {
     };
 
     const compute_pipeline_info = vk.ComputePipelineCreateInfo{
+        .base_pipeline_index = 0,
         .layout = layout,
-        .flags = .{},
         .stage = cfg.shader.pipeline_info,
     };
 
-    try pr_dev.createComputePipelines(
+    _ = try pr_dev.createComputePipelines(
         .null_handle,
         1,
-        &.{&compute_pipeline_info},
+        &.{compute_pipeline_info},
         null,
         @as([*]vk.Pipeline, @ptrCast(&new.h_pipeline)),
     );
