@@ -110,9 +110,9 @@ const GPUState = struct {
     particles: StorageBuffer(Particle),
 
     pub fn deinit(self: *GPUState) void {
-        self.particles.buffer().deinit();
-        self.uniforms.buffer().deinit();
-        self.compute_uniforms.buffer().deinit();
+        self.particles.deinit();
+        self.uniforms.deinit();
+        self.compute_uniforms.deinit();
 
         self.render_view.deinit();
         self.render_target.deinit();
@@ -182,7 +182,7 @@ const SampleState = struct {
         self.gpu_state.uniforms = try UniformBuffer(ApplicationUniforms)
             .create(self.ctx);
 
-        try self.gpu_state.uniforms.buffer().setData(&self.gpu_state.host_uniforms);
+        try self.gpu_state.uniforms.setData(&self.gpu_state.host_uniforms);
 
         // create fragment-specific descriptors
         self.graphics.descriptor = try Descriptor.init(self.ctx, self.allocator, .{
@@ -204,7 +204,7 @@ const SampleState = struct {
             .renderpass = &self.graphics.render_quad.renderpass,
         });
 
-        self.graphics.cmd_buf = try CommandBuffer.init(self.ctx);
+        self.graphics.cmd_buf = try CommandBuffer.init(self.ctx, .{});
     }
 
     pub fn createSyncObjects(self: *SampleState) !void {
@@ -216,7 +216,7 @@ const SampleState = struct {
     }
 
     pub fn createComputePipelines(self: *SampleState) !void {
-        self.compute.cmd_buf = try CommandBuffer.init(self.ctx);
+        self.compute.cmd_buf = try CommandBuffer.init(self.ctx, .{ .src_queue_family = .Compute });
 
         const shader = try helpers.initSampleShader(
             self.ctx,
@@ -239,7 +239,7 @@ const SampleState = struct {
             },
             .clear_col = .{ .float_32 = .{ 0, 0, 0, 0 } },
         });
-        self.gpu_state.render_view = try self.gpu_state.render_target.createView(.{.color_bit = true});
+        self.gpu_state.render_view = try self.gpu_state.render_target.createView(.{ .color_bit = true });
 
         self.gpu_state.compute_uniforms = try UniformBuffer(ComputeUniforms).create(self.ctx);
         self.gpu_state.particles = try StorageBuffer(Particle).create(self.ctx, PARTICLE_COUNT);
@@ -265,7 +265,58 @@ const SampleState = struct {
             .shader = &shader,
             .desc_bindings = descriptors,
         });
+    }
 
+    pub fn initComputeData(self: *SampleState) !void {
+        // initialize compute shader uniforms
+        try self.gpu_state.compute_uniforms.setData(&ComputeUniforms{
+            .col = math.vec(.{ 1.0, 1.0, 0.0 }),
+            .particle_count = PARTICLE_COUNT,
+            .pixels_rad = 20,
+            .res_x = self.swapchain.extent.width,
+            .res_y = self.swapchain.extent.height,
+        });
+        // randomize particle starting positions
+        const seed: u64 = @intCast(@max(0, std.time.timestamp()));
+        var rand_engine = std.Random.Sfc64.init(seed);
+        const rand_generator = std.Random.init(
+            &rand_engine,
+            std.Random.Sfc64.fill,
+        );
+
+        const particles_temp = try self.allocator.alloc(Particle, PARTICLE_COUNT);
+
+        const res_xf: f32 = @floatFromInt(self.swapchain.extent.width);
+        const res_yf: f32 = @floatFromInt(self.swapchain.extent.height);
+
+        for (particles_temp) |*particle| {
+            particle.* = Particle{
+                .position = math.vec(.{
+                    rand_generator.float(f32) * res_xf,
+                    rand_generator.float(f32) * res_yf,
+                    0,
+                    0,
+                }),
+            };
+        }
+
+        try self.gpu_state.particles.setData(particles_temp.ptr);
+        log.debug("Successfully initialized compute shader data", .{});
+    }
+
+    pub fn testCompute(self: *SampleState) !void {
+        const tmp_cmds = try CommandBuffer.oneShot(self.ctx.env(.dev), .{
+            .src_queue_family = .Compute,
+        });
+        self.compute.slime_pipeline.bind(&tmp_cmds);
+        self.compute.slime_pipeline.dispatch(&tmp_cmds, 4, 4, 1);
+        try tmp_cmds.end();
+        try tmp_cmds.submit(.Compute, .{});
+        try self.ctx.dev.waitIdle();
+
+        // transition render layout to shader sampler friendly
+        try self.gpu_state.render_target.transitionLayout(.general, .shader_read_only_optimal, .{});
+        try self.ctx.dev.waitIdle();
     }
 
     pub fn active(self: *const SampleState) bool {
@@ -274,7 +325,7 @@ const SampleState = struct {
 
     fn updateUniforms(self: *SampleState) !void {
         self.gpu_state.host_uniforms.time = @floatCast(glfw.getTime());
-        try self.gpu_state.uniforms.buffer().setData(&self.gpu_state.host_uniforms);
+        try self.gpu_state.uniforms.setData(&self.gpu_state.host_uniforms);
     }
 
     // intercepts errors and logs them
@@ -340,8 +391,12 @@ pub fn main() !void {
     try state.createSwapchain();
     try state.createGraphicsPipeline();
     try state.createComputePipelines();
+    try state.initComputeData();
 
     state.window.show();
+
+    // test the compyuter shader
+    try state.testCompute();
 
     while (state.active()) {
         state.update() catch |err| {

@@ -189,19 +189,11 @@ pub fn deinit(self: *Self) void {
     alloc.destroy(self);
 }
 
-pub const SyncInfo = struct {
-    fence_sig: ?vk.Fence = null,
-    fence_wait: ?vk.Fence = null,
-
-    sem_sig: ?vk.Semaphore = null,
-    sem_wait: ?vk.Semaphore = null,
-};
-
 pub fn submitCommands(
     self: *Self,
     cmd_buf: *const CommandBuffer,
     comptime queue_family: QueueType,
-    sync: SyncInfo,
+    sync: api.SyncInfo,
 ) !void {
     const queue = switch (queue_family) {
         .Graphics => self.graphics_queue,
@@ -220,7 +212,7 @@ pub fn submitCommands(
 pub fn presentFrame(
     self: *Self,
     swapchain: *const Swapchain,
-    sync: SyncInfo,
+    sync: api.SyncInfo,
 ) !void {
     const image = swapchain.image_index;
     try self.present_queue.present(swapchain, image, sync.sem_wait);

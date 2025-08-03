@@ -119,7 +119,7 @@ pub fn drawOneShot(self: *const Self, cmd_buf: *const CommandBuffer, framebuffer
     self.renderpass.begin(cmd_buf, framebuffer, image_index);
 
     if (self.desc) |d| {
-        d.bind(cmd_buf, self.pipeline.h_pipeline_layout);
+        d.bind(cmd_buf, self.pipeline.h_pipeline_layout, .{});
     }
 
     self.dev.draw(cmd_buf, 6, 1, 0, 0);
