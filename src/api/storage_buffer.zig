@@ -26,8 +26,7 @@ pub fn ComptimeStorageBuffer(comptime T: type) type {
             };
         }
 
-        pub fn setData(ctx: *anyopaque, data: *const anyopaque) !void {
-            const self: *Self = @ptrCast(@alignCast(ctx));
+        pub fn setData(self: *Self, data: *const anyopaque) !void {
             const elem: []const T = @as([*]const T, @ptrCast(@alignCast(data)))[0..self.buf.size];
 
             var staging = try self.buf.createStaging();
@@ -41,8 +40,7 @@ pub fn ComptimeStorageBuffer(comptime T: type) type {
             try buf_api.copy(staging.buffer(), self.buffer(), self.buf.dev);
         }
 
-        pub fn bind(ctx: *anyopaque, cmd_buf: *const CommandBuffer) void {
-            const self: *Self = @ptrCast(@alignCast(ctx));
+        pub fn bind(self: *Self, cmd_buf: *const CommandBuffer) void {
             self.buf.dev.pr_dev.cmdBindVertexBuffers(
                 cmd_buf.h_cmd_buffer,
                 0,
@@ -51,8 +49,7 @@ pub fn ComptimeStorageBuffer(comptime T: type) type {
                 &.{0},
             );
         }
-        pub fn deinit(ctx: *anyopaque) void {
-            const self: *Self = @ptrCast(@alignCast(ctx));
+        pub fn deinit(self: *Self) void {
             self.buf.deinit();
         }
 
@@ -62,11 +59,7 @@ pub fn ComptimeStorageBuffer(comptime T: type) type {
                 .handle = self.buf.h_buf,
                 .ptr = self,
                 .size = self.buf.bytesSize(),
-                .vtable = &.{
-                    .bind = bind,
-                    .setData = setData,
-                    .deinit = deinit,
-                },
+                .vtable = buf_api.AutoVTable(Self),
             };
         }
     };

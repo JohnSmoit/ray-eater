@@ -25,12 +25,27 @@ const SetDataFn = *const (fn (*anyopaque, *const anyopaque) anyerror!void);
 const DeinitFn = *const (fn (*anyopaque) void);
 
 const VTable = struct {
-    bind: *const (fn (*anyopaque, *const CommandBuffer) void) = undefined,
+    bind: *const (fn (*anyopaque, *const CommandBuffer) void) = bindNoOp,
 
     // this is kinda gross, maybe consider something other than type erasing here...
-    setData: *const (fn (*anyopaque, *const anyopaque) anyerror!void) = undefined,
-    deinit: *const (fn (*anyopaque) void) = undefined,
+    setData: *const (fn (*anyopaque, *const anyopaque) anyerror!void) = setDataNoOp,
+    deinit: *const (fn (*anyopaque) void) = deinitNoOp,
 };
+
+// default functions (NO-Ops) if a corresponding VTable candidate isn't found
+pub fn bindNoOp(ctx: *anyopaque, cmd_buf: *const CommandBuffer) void {
+    _ = ctx;
+    _ = cmd_buf;
+}
+
+pub fn setDataNoOp(ctx: *anyopaque, data: *const anyopaque) anyerror!void {
+    _ = ctx;
+    _ = data;
+}
+
+pub fn deinitNoOp(ctx: *anyopaque) void {
+    _ = ctx;
+}
 
 /// generic buffer interface, exposes common functionality
 /// for buffer operations such as binding, setting data, and
@@ -76,9 +91,9 @@ pub fn BindMixin(comptime T: type, val: ?*const (fn(*T, *const CommandBuffer) vo
     return Wrapper.f;
 }
 
-pub fn SetDataMixin(comptime T: type, val: ?*const (fn(*T, *anyopaque) anyerror!void)) SetDataFn {
+pub fn SetDataMixin(comptime T: type, val: ?*const (fn(*T, *const anyopaque) anyerror!void)) SetDataFn {
     const Wrapper = struct {
-        pub fn f(ctx: *anyopaque, data: *anyopaque) anyerror!void {
+        pub fn f(ctx: *anyopaque, data: *const anyopaque) anyerror!void {
             const self: *T = @ptrCast(@alignCast(ctx));
             if (val) |func| try func(self, data);
         }
@@ -98,25 +113,35 @@ pub fn DeinitMixin(comptime T: type, val: ?*const (fn(*T) void)) DeinitFn {
     return Wrapper.f;
 }
 
+
 //TODO: Implement AUtoVTable
 pub fn AutoVTable(comptime T: type) *const VTable {
-    const info = @typeInfo(T);
+    const vtable1 = comptime gen_vtable: {
 
-    const sinfo = switch(info) {
-        .Struct => |s| s,
-        else => @compileError("Invalid Vtable base type, must be struct"), 
+        var vtable = VTable{};
+        
+        if (@hasDecl(T, "bind")) {
+            vtable.bind = BindMixin(T, @field(T, "bind"));
+        } 
+        if (@hasDecl(T, "setData")) {
+            vtable.setData = SetDataMixin(T, @field(T, "setData"));
+        }
+        if (@hasDecl(T, "deinit")) {
+            vtable.deinit = DeinitMixin(T, @field(T, "deinit"));
+        }
+
+
+        break :gen_vtable vtable;
     };
 
-    _ = sinfo;
-
-    return undefined;
+    return &vtable1;
 }
 
 pub fn copy(src: AnyBuffer, dst: AnyBuffer, dev: *const DeviceHandler) !void {
     assert(src.cfg.usage.contains(.{ .transfer_src_bit = true }));
     assert(dst.cfg.usage.contains(.{ .transfer_dst_bit = true }));
 
-    const transfer_cmds = try CommandBuffer.oneShot(dev);
+    const transfer_cmds = try CommandBuffer.oneShot(dev, .{});
     defer transfer_cmds.deinit();
 
     dev.pr_dev.cmdCopyBuffer(
@@ -132,6 +157,7 @@ pub fn copy(src: AnyBuffer, dst: AnyBuffer, dev: *const DeviceHandler) !void {
     );
 
     try transfer_cmds.end();
+    try transfer_cmds.submit(.Graphics, .{});
 }
 
 pub fn StagingType(T: type) type {
@@ -260,7 +286,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             assert(config.usage.contains(.{ .transfer_src_bit = true }));
             assert(dest.config.usage.contains(.{ .transfer_dst_bit = true }));
 
-            const transfer_cmds = try CommandBuffer.oneShot(self.dev);
+            const transfer_cmds = try CommandBuffer.oneShot(self.dev, .{});
             defer transfer_cmds.deinit();
 
             self.dev.pr_dev.cmdCopyBuffer(
@@ -276,6 +302,7 @@ pub fn GenericBuffer(T: type, comptime config: Config) type {
             );
 
             try transfer_cmds.end();
+            try transfer_cmds.submit(.Graphics, .{});
         }
 
         pub fn deinit(self: *const Self) void {

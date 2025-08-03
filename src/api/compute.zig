@@ -38,6 +38,7 @@ pub fn init(ctx: *const Context, allocator: Allocator, cfg: Config) !Self {
         .set_layout_count = 1,
         .p_set_layouts = &.{desc.h_desc_layout},
     }, null);
+    errdefer pr_dev.destroyPipelineLayout(layout, null);
 
     var new = Self{
         .pr_dev = pr_dev,
@@ -68,7 +69,8 @@ pub fn updateData(self: *Self, binding: u32, data: anytype) !void {
 }
 
 pub fn bind(self: *const Self, cmd_buf: *const CommandBuffer) void {
-    self.pr_dev.cmdBindPipeline(cmd_buf, .compute, self.h_pipeline);
+    self.pr_dev.cmdBindPipeline(cmd_buf.h_cmd_buffer, .compute, self.h_pipeline);
+    self.desc.bind(cmd_buf, self.h_pipeline_layout, .{ .bind_point = .compute });
 }
 
 pub fn dispatch(

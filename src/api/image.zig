@@ -230,7 +230,7 @@ pub fn transitionLayout(
     to: vk.ImageLayout,
     opts: LayoutTransitionOptions,
 ) !void {
-    const transition_cmds = try CommandBuffer.oneShot(self.dev);
+    const transition_cmds = try CommandBuffer.oneShot(self.dev, .{});
     defer transition_cmds.deinit();
 
     const opts2 = LayoutTransitionOptions{
@@ -242,10 +242,12 @@ pub fn transitionLayout(
     self.cmdTransitionLayout(from, to, opts2);
 
     try transition_cmds.end();
+    try transition_cmds.submit(.Graphics, .{});
 }
 
 fn copyFromStaging(self: *Self, staging_buf: *StagingBuffer, extent: vk.Extent3D) !void {
-    const copy_cmds = try CommandBuffer.oneShot(self.dev);
+    const copy_cmds = try CommandBuffer.oneShot(self.dev, .{});
+    defer copy_cmds.deinit();
 
     self.dev.pr_dev.cmdCopyBufferToImage(
         copy_cmds.h_cmd_buffer,
@@ -274,6 +276,9 @@ fn copyFromStaging(self: *Self, staging_buf: *StagingBuffer, extent: vk.Extent3D
         log.err("Image copy from staging buffer failed: {!}", .{err});
         return err;
     };
+
+    try copy_cmds.submit(.Graphics, .{});
+
 }
 
 pub fn cmdClear(
@@ -349,7 +354,8 @@ fn initSelf(self: *Self, dev: *const DeviceHandler, config: Config) !void {
         // WARN: This disregards the fact that if a staging buffer is not used, then
         // the user is probably copying from host visible memory (not sure if this handles that
         // correctly)
-        const tmp_cmds = try CommandBuffer.oneShot(self.dev);
+        const tmp_cmds = try CommandBuffer.oneShot(self.dev, .{});
+        defer tmp_cmds.deinit();
 
         if (config.clear_col) |col| {
             self.cmdTransitionLayout(.undefined, .transfer_dst_optimal, .{
@@ -366,6 +372,7 @@ fn initSelf(self: *Self, dev: *const DeviceHandler, config: Config) !void {
         }
 
         try tmp_cmds.end();
+        try tmp_cmds.submit(.Graphics, .{});
     }
 }
 

@@ -53,10 +53,15 @@ const BufInterface = buf.AnyBuffer;
 pub const Descriptor = @import("descriptor.zig");
 pub const ResolvedDescriptorBinding = Descriptor.ResolvedBinding;
 
+// additional utility structs and stuff
+const types = @import("types.zig");
+pub const SyncInfo = types.SyncInfo;
+
 // sync stuff
 pub const Semaphore = sync.Semaphore;
 pub const Fence = sync.Fence;
 
 // shaders
 pub const ShaderModule = sh.Module;
+
 

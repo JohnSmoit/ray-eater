@@ -157,7 +157,6 @@ fn updateDescriptorSets(
 
                 writes[index].p_image_info = &.{write_infos[index].Image};
                 writes[index].descriptor_type = .storage_image;
-                
             },
             else => {
                 const buf: AnyBuffer, const dt: vk.DescriptorType = switch (binding.data) {
@@ -245,10 +244,19 @@ pub fn init(ctx: *const Context, allocator: Allocator, config: Config) !Self {
     return descriptor;
 }
 
-pub fn bind(self: *const Self, cmd_buf: *const CommandBuffer, layout: vk.PipelineLayout) void {
+pub const BindInfo = struct {
+    bind_point: vk.PipelineBindPoint = .graphics,
+};
+
+pub fn bind(
+    self: *const Self,
+    cmd_buf: *const CommandBuffer,
+    layout: vk.PipelineLayout,
+    info: BindInfo,
+) void {
     self.pr_dev.cmdBindDescriptorSets(
         cmd_buf.h_cmd_buffer,
-        .graphics,
+        info.bind_point,
         layout,
         0,
         1,

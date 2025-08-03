@@ -1,4 +1,5 @@
 const std = @import("std");
+const api = @import("api.zig");
 const vk = @import("vulkan");
 const base = @import("base.zig");
 const util = @import("../util.zig");
@@ -17,16 +18,20 @@ h_cmd_pool: vk.CommandPool,
 dev: *const DeviceHandler,
 one_shot: bool = false,
 
-pub fn init(ctx: *const Context) !Self {
+pub const Config = struct {
+    src_queue_family: queue.QueueFamily = .Graphics,
+};
+
+pub fn init(ctx: *const Context, config: Config) !Self {
     const dev = ctx.env(.dev);
-    return initDev(dev);
+    return initDev(dev, config);
 }
 
-fn initDev(dev: *const DeviceHandler) !Self {
+fn initDev(dev: *const DeviceHandler, config: Config) !Self {
     var cmd_buffer: vk.CommandBuffer = undefined;
     dev.pr_dev.allocateCommandBuffers(
         &.{
-            .command_pool = dev.h_cmd_pool,
+            .command_pool = dev.getCommandPool(config.src_queue_family),
             .level = .primary,
             .command_buffer_count = 1,
         },
@@ -38,13 +43,13 @@ fn initDev(dev: *const DeviceHandler) !Self {
 
     return .{
         .h_cmd_buffer = cmd_buffer,
-        .h_cmd_pool = dev.h_cmd_pool,
+        .h_cmd_pool = dev.getCommandPool(config.src_queue_family),
         .dev = dev,
     };
 }
 
-pub fn oneShot(dev: *const DeviceHandler) !Self {
-    var buf = try initDev(dev);
+pub fn oneShot(dev: *const DeviceHandler, config: Config) !Self {
+    var buf = try initDev(dev, config);
     buf.one_shot = true;
 
     try buf.beginConfig(.{ .one_time_submit_bit = true });
@@ -70,21 +75,6 @@ pub fn end(self: *const Self) !void {
         log.err("Command recording failed: {!}", .{err});
         return err;
     };
-
-    // NOTE: For now, I'm going to just hardcode a submit to the graphics queue
-    // if a one shot command buffer is used
-    // Also, synchronization is not gonna be handled yet...
-    // the best way to handle synchronization is to only do 1 thing at a time 😊
-    // (by waiting idle)
-
-    // We need queue handles from the context straight up, no way around it ugh
-    // this shit is too bad to handle otherwise
-    if (self.one_shot) {
-        const submit_queue = self.dev.getQueue(.Graphics) orelse
-            return error.OneShotSubmitFailed;
-        try submit_queue.submit(self, null, null, null);
-        submit_queue.waitIdle();
-    }
 }
 
 pub fn reset(self: *const Self) !void {
@@ -94,7 +84,19 @@ pub fn reset(self: *const Self) !void {
     };
 }
 
+pub fn submit(self: *const Self, comptime fam: queue.QueueFamily, sync: api.SyncInfo) !void {
+    const submit_queue = self.dev.getQueue(fam) orelse return error.Unsupported;
+    try submit_queue.submit(
+        self,
+        sync.sem_wait,
+        sync.sem_sig,
+        sync.fence_wait,
+    );
+}
+
 pub fn deinit(self: *const Self) void {
+    // make sure the command buffer isn't in use before destroying it..
+    self.dev.waitIdle() catch {};
     self.dev.pr_dev.freeCommandBuffers(
         self.h_cmd_pool,
         1,

@@ -339,7 +339,7 @@ pub const DeviceHandler = struct {
 
     // HAve the device context manage the command pool
     // and then all command buffers can be created using the same pool
-    h_cmd_pool: vk.CommandPool = .null_handle,
+    h_cmd_pool: [@typeInfo(QueueType).@"enum".fields.len]vk.CommandPool = undefined,
     props: vk.PhysicalDeviceProperties,
 
     pub fn findMemoryTypeIndex(
@@ -547,11 +547,7 @@ pub const DeviceHandler = struct {
         }
 
         const dev_proxy = vk.DeviceProxy.init(logical_dev, dev_wrapper);
-
-        const cmd_pool = try dev_proxy.createCommandPool(&.{
-            .flags = .{ .reset_command_buffer_bit = true },
-            .queue_family_index = dev_queue_indices.graphics_family.?,
-        }, null);
+        
 
         return DeviceHandler{
             .ctx = parent,
@@ -559,15 +555,32 @@ pub const DeviceHandler = struct {
             .pr_dev = dev_proxy,
             .h_dev = logical_dev,
             .h_pdev = chosen_dev,
-            .h_cmd_pool = cmd_pool,
+            .h_cmd_pool = [3]vk.CommandPool{       
+                try dev_proxy.createCommandPool(&.{
+                    .flags = .{ .reset_command_buffer_bit = true },
+                    .queue_family_index = dev_queue_indices.graphics_family.?,
+                }, null),
+                .null_handle,
+                try dev_proxy.createCommandPool(&.{
+                    .flags = .{ .reset_command_buffer_bit = true },
+                    .queue_family_index = dev_queue_indices.compute_family.?,
+                }, null),
+            },
             .families = dev_queue_indices,
             .swapchain_details = swapchain_details,
             .props = dev_properties,
         };
     }
 
+    pub fn getCommandPool(self: *const DeviceHandler, fam: api.QueueType) vk.CommandPool {
+        return self.h_cmd_pool[@intFromEnum(fam)];
+    }
+
     pub fn deinit(self: *DeviceHandler) void {
-        self.pr_dev.destroyCommandPool(self.h_cmd_pool, null);
+        for (self.h_cmd_pool) |pool| {
+            if (pool == .null_handle) continue;
+            self.pr_dev.destroyCommandPool(pool, null);
+        }
         self.pr_dev.destroyDevice(null);
 
         self.ctx.allocator.destroy(self.dev_wrapper);
