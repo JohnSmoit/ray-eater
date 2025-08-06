@@ -72,9 +72,9 @@ pub const FixedFunctionState = struct {
 
         self.vertex_input = vk.PipelineVertexInputStateCreateInfo{
             .vertex_binding_description_count = if (config.vertex_binding != null) 1 else 0,
-            .p_vertex_binding_descriptions = if (config.vertex_binding) |vb| util.asManyPtr(
+            .p_vertex_binding_descriptions = if (config.vertex_binding) |*vb| util.asManyPtr(
                 vk.VertexInputBindingDescription,
-                &vb,
+                vb,
             ) else null,
             .vertex_attribute_description_count = @intCast(config.vertex_attribs.len),
             .p_vertex_attribute_descriptions = config.vertex_attribs.ptr,

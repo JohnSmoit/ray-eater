@@ -432,7 +432,7 @@ pub fn init(ctx: *const Context, config: Config) !Self {
 
 /// creates an image from an image file.
 /// Image parameters will be tuned for usage as a texture 
-/// more so than a general purpose image for now...
+/// more so than a general purpose image
 pub fn fromFile(ctx: *const Context, allocator: Allocator, path: []const u8) !Self {
     var image_data = rsh.loadImageFile(path, allocator) catch |err| {
         log.err("Failed to load image: {!}", .{err});
@@ -446,13 +446,13 @@ pub fn fromFile(ctx: *const Context, allocator: Allocator, path: []const u8) !Se
     try staging_buffer.buffer().setData(image_data.pixels.asBytes().ptr);
     defer staging_buffer.deinit();
 
-    const image = try Self.init(ctx, &.{
+    const image = try Self.init(ctx, .{
         .format = .r8g8b8a8_srgb,
         .tiling = .optimal,
-
-        .height = @intCast(image_data.height),
-        .width = @intCast(image_data.width),
-
+        .extent = .{
+            .height = @intCast(image_data.height),
+            .width = @intCast(image_data.width),
+        },
         .usage = .{ .transfer_dst_bit = true, .sampled_bit = true },
         .mem_flags = .{ .device_local_bit = true },
         .staging_buf = &staging_buffer,

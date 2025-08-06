@@ -1,14 +1,15 @@
 const vk = @import("vulkan");
-const buf = @import("buffer.zig");
+const buf_api = @import("buffer.zig");
 
-const GenericBuffer = buf.GenericBuffer;
+const GenericBuffer = buf_api.GenericBuffer;
 const CommandBuffer = @import("command_buffer.zig");
 const DeviceHandler = @import("base.zig").DeviceHandler;
 const Context = @import("../context.zig");
-const AnyBuffer = buf.AnyBuffer;
+const AnyBuffer = buf_api.AnyBuffer;
 
 fn getIndexType(T: type) vk.IndexType {
     return switch (T) {
+        u8 => .uint8,
         u16 => .uint16,
         u32 => .uint32,
         else => @compileError("Invalid index format (TODO: Better deduction)"),
@@ -37,8 +38,7 @@ pub fn IndexBuffer(T: type) type {
             };
         }
 
-        pub fn setData(ctx: *anyopaque, data: *const anyopaque) !void {
-            const self: *Self = @ptrCast(@alignCast(ctx));
+        pub fn setData(self: *Self, data: *const anyopaque) !void {
             const elem: []const T = @as([*]const T, @ptrCast(@alignCast(data)))[0..self.buf.size];
 
             var staging = try self.buf.createStaging();
@@ -49,16 +49,14 @@ pub fn IndexBuffer(T: type) type {
 
             @memcpy(staging_mem, elem);
 
-            try buf.copy(staging.buffer(), self.buffer(), self.buf.dev);
+            try buf_api.copy(staging.buffer(), self.buffer(), self.buf.dev);
         }
 
-        pub fn deinit(ctx: *anyopaque) void {
-            const self: *Self = @ptrCast(@alignCast(ctx));
+        pub fn deinit(self: *Self) void {
             self.buf.deinit();
         }
 
-        pub fn bind(ctx: *anyopaque, cmd_buf: *const CommandBuffer) void {
-            const self: *Self = @ptrCast(@alignCast(ctx));
+        pub fn bind(self: *Self, cmd_buf: *const CommandBuffer) void {
             self.buf.dev.pr_dev.cmdBindIndexBuffer(cmd_buf.h_cmd_buffer, self.buf.h_buf, 0, index_type);
         }
 
@@ -68,11 +66,7 @@ pub fn IndexBuffer(T: type) type {
                 .handle = self.buf.h_buf,
                 .ptr = self,
                 .size = self.buf.bytesSize(),
-                .vtable = &.{
-                    .bind = bind,
-                    .setData = setData,
-                    .deinit = deinit,
-                },
+                .vtable = buf_api.AutoVTable(Self),
             };
         }
     };

@@ -6,7 +6,7 @@ const vk = @import("vulkan");
 
 const meth = @import("../math.zig");
 const util = @import("../util.zig");
-const buf = @import("buffer.zig");
+const buf_api = @import("buffer.zig");
 
 const Layout = union(enum) {
     Struct: StructInfo,
@@ -16,7 +16,7 @@ const Layout = union(enum) {
 const DeviceHandler = @import("base.zig").DeviceHandler;
 const CommandBuffer = @import("command_buffer.zig");
 const Context = @import("../context.zig");
-const AnyBuffer = buf.AnyBuffer;
+const AnyBuffer = buf_api.AnyBuffer;
 
 fn validateType(comptime T: type) Layout {
     const info = @typeInfo(T);
@@ -30,7 +30,6 @@ fn validateType(comptime T: type) Layout {
     };
 }
 
-// This is extremely jank when taking index buffers into account FIX once we get to uniform buffers...
 fn getBindingDescription(T: type) vk.VertexInputBindingDescription {
     _ = validateType(T);
 
@@ -86,7 +85,7 @@ pub fn VertexInputDescription(T: type) type {
 pub fn VertexBuffer(T: type) type {
     return struct {
         const Self = @This();
-        const Inner = buf.GenericBuffer(T, .{
+        const Inner = buf_api.GenericBuffer(T, .{
             .memory = .{ .device_local_bit = true },
             .usage = .{
                 .transfer_dst_bit = true,
@@ -106,8 +105,7 @@ pub fn VertexBuffer(T: type) type {
             };
         }
 
-        pub fn setData(ctx: *anyopaque, data: *const anyopaque) !void {
-            const self: *Self = @ptrCast(@alignCast(ctx));
+        pub fn setData(self: *Self, data: *const anyopaque) !void {
             const elem: []const T = @as([*]const T, @ptrCast(@alignCast(data)))[0..self.buf.size];
 
             var staging = try self.buf.createStaging();
@@ -118,11 +116,10 @@ pub fn VertexBuffer(T: type) type {
 
             @memcpy(staging_mem, elem);
 
-            try buf.copy(staging.buffer(), self.buffer(), self.buf.dev);
+            try buf_api.copy(staging.buffer(), self.buffer(), self.buf.dev);
         }
 
-        pub fn bind(ctx: *anyopaque, cmd_buf: *const CommandBuffer) void {
-            const self: *Self = @ptrCast(@alignCast(ctx));
+        pub fn bind(self: *Self, cmd_buf: *const CommandBuffer) void {
             self.buf.dev.pr_dev.cmdBindVertexBuffers(
                 cmd_buf.h_cmd_buffer,
                 0,
@@ -138,16 +135,11 @@ pub fn VertexBuffer(T: type) type {
                 .handle = self.buf.h_buf,
                 .ptr = self,
                 .size = self.buf.bytesSize(),
-                .vtable = &.{
-                    .bind = bind,
-                    .setData = setData,
-                    .deinit = deinit,
-                },
+                .vtable = buf_api.AutoVTable(Self),
             };
         }
 
-        pub fn deinit(ctx: *anyopaque) void {
-            const self: *Self = @ptrCast(@alignCast(ctx));
+        pub fn deinit(self: *Self) void {
             self.buf.deinit();
         }
     };
