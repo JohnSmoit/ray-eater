@@ -93,7 +93,7 @@ const SampleEntry = struct {
 };
 var sample_files = [_]SampleEntry{
     .{ .name = "basic_planes", .path = "basic_planes.zig" },
-    .{ .name = "slime", .path = "slime/main.zig" },
+    .{ .name = "compute_drawing", .path = "compute_drawing/main.zig" },
     .{ .name = "test_sample", .path = "test_sample.zig" },
 };
 

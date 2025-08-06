@@ -1,3 +1,7 @@
+//! Basic example of compute shader initialization using the Low-Level
+//! unmanaged Vulkan API.
+//! NOTE: This example will likely be deprecated in favor of using the upcoming
+//! Managed low level API (see milestone 0.1).
 const std = @import("std");
 const ray = @import("ray");
 const glfw = @import("glfw");
@@ -38,15 +42,11 @@ const Compute = api.Compute;
 const log = std.log.scoped(.application);
 
 const ComputeState = struct {
-    // pipeline for running slime simulation
-    slime_pipeline: Compute,
-    // pipeline for updating pheremone map
-    stinky_pipeline: Compute,
-
+    pipeline: Compute,
     cmd_buf: CommandBuffer,
 
     pub fn deinit(self: *ComputeState) void {
-        self.slime_pipeline.deinit();
+        self.pipeline.deinit();
         self.cmd_buf.deinit();
     }
 };
@@ -94,20 +94,11 @@ const GPUState = struct {
 
     // compute and graphics visible (needs viewport quad)
     // written to in the compute shader and simply mapped to the viewport
-    // with a few transformations for color and such.
-    // ... This also represents the pheremone map that sim agents in the compute
-    // shader would use to determine their movements
-    //
     render_target: Image,
     render_view: Image.View,
     render_sampler: vk.Sampler,
 
     // compute visible only
-    // (contains source image data to base simulation off of)
-    src_image: Image,
-
-    // compute visible only
-    // -- contains simulation agents
     particles: StorageBuffer(Particle),
 
     pub fn deinit(self: *GPUState) void {
@@ -145,7 +136,7 @@ const SampleState = struct {
     sync: SyncState = undefined,
 
     pub fn createContext(self: *SampleState) !void {
-        self.window = try helpers.makeBasicWindow(900, 600, "BAD APPLE >:}");
+        self.window = try helpers.makeBasicWindow(900, 600, "Drawing with Compute");
         self.ctx = try Context.init(self.allocator, .{
             .inst_extensions = helpers.glfwInstanceExtensions(),
             .loader = glfw.glfwGetInstanceProcAddress,
@@ -168,7 +159,7 @@ const SampleState = struct {
         const frag_shader = try helpers.initSampleShader(
             self.ctx,
             self.allocator,
-            "slime/shaders/frag.glsl",
+            "compute_drawing/shaders/frag.glsl",
             .Fragment,
         );
 
@@ -228,7 +219,7 @@ const SampleState = struct {
         const shader = try helpers.initSampleShader(
             self.ctx,
             self.allocator,
-            "slime/shaders/compute_slime.glsl",
+            "compute_drawing/shaders/compute_slime.glsl",
             .Compute,
         );
         defer shader.deinit();
@@ -269,7 +260,7 @@ const SampleState = struct {
                 .stages = .{ .compute_bit = true },
             },
         };
-        self.compute.slime_pipeline = try Compute.init(self.ctx, self.allocator, .{
+        self.compute.pipeline = try Compute.init(self.ctx, self.allocator, .{
             .shader = &shader,
             .desc_bindings = descriptors,
         });
@@ -316,8 +307,8 @@ const SampleState = struct {
         const tmp_cmds = try CommandBuffer.oneShot(self.ctx.env(.dev), .{
             .src_queue_family = .Compute,
         });
-        self.compute.slime_pipeline.bind(&tmp_cmds);
-        self.compute.slime_pipeline.dispatch(&tmp_cmds, 4, 4, 1);
+        self.compute.pipeline.bind(&tmp_cmds);
+        self.compute.pipeline.dispatch(&tmp_cmds, 4, 4, 1);
         try tmp_cmds.end();
         try tmp_cmds.submit(.Compute, .{});
         try self.ctx.dev.waitIdle();
