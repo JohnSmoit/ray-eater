@@ -8,10 +8,13 @@ layout(binding = 0) uniform SampleUniforms {
     vec2 mouse;
 } uniforms;
 
+layout(binding = 1) uniform sampler2D compute_image;
+
 void main() {
-    vec2 ot = vec2(
-        min(1.0, texCoord.x + sin(uniforms.time)),
-        min(1.0, texCoord.y + cos(uniforms.time))
-    );
-    fragColor = vec4(ot, 0.0, 1.0);
+   // vec2 ot = vec2(
+   //     min(1.0, texCoord.x + sin(uniforms.time)),
+   //     min(1.0, texCoord.y + cos(uniforms.time))
+   // );
+
+    fragColor = texture(compute_image, texCoord);
 }

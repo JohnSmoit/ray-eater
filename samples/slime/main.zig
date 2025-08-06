@@ -100,6 +100,7 @@ const GPUState = struct {
     //
     render_target: Image,
     render_view: Image.View,
+    render_sampler: vk.Sampler,
 
     // compute visible only
     // (contains source image data to base simulation off of)
@@ -186,10 +187,16 @@ const SampleState = struct {
 
         // create fragment-specific descriptors
         self.graphics.descriptor = try Descriptor.init(self.ctx, self.allocator, .{
-            .bindings = &.{.{
+            .bindings = &.{ .{
                 .data = .{ .Uniform = self.gpu_state.uniforms.buffer() },
                 .stages = .{ .fragment_bit = true },
-            }},
+            }, DescriptorBinding{
+                .data = .{ .Sampler = .{
+                    .sampler = self.gpu_state.render_sampler,
+                    .view = self.gpu_state.render_view.h_view,
+                } },
+                .stages = .{ .fragment_bit = true },
+            } },
         });
 
         try self.graphics.render_quad.initSelf(self.ctx, self.allocator, .{
@@ -240,6 +247,7 @@ const SampleState = struct {
             .clear_col = .{ .float_32 = .{ 0, 0, 0, 0 } },
         });
         self.gpu_state.render_view = try self.gpu_state.render_target.createView(.{ .color_bit = true });
+        self.gpu_state.render_sampler = try self.gpu_state.render_target.getSampler(.{});
 
         self.gpu_state.compute_uniforms = try UniformBuffer(ComputeUniforms).create(self.ctx);
         self.gpu_state.particles = try StorageBuffer(Particle).create(self.ctx, PARTICLE_COUNT);
@@ -348,7 +356,6 @@ const SampleState = struct {
         );
 
         try self.graphics.cmd_buf.end();
-
         // submit the command buffer to a synchronized queue
         try self.ctx.submitCommands(&self.graphics.cmd_buf, .Graphics, .{
             .fence_wait = self.sync.frame_fence.h_fence,
@@ -389,8 +396,8 @@ pub fn main() !void {
     try state.createContext();
     try state.createSyncObjects();
     try state.createSwapchain();
-    try state.createGraphicsPipeline();
     try state.createComputePipelines();
+    try state.createGraphicsPipeline();
     try state.initComputeData();
 
     state.window.show();
