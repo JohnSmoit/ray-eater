@@ -46,7 +46,10 @@ pub const ResolvedBinding = struct {
     stages: vk.ShaderStageFlags,
     data: union(DescriptorType) {
         Uniform: AnyBuffer,
-        Sampler: *const TexImage,
+        Sampler: struct {
+            sampler: vk.Sampler,
+            view: vk.ImageView,
+        },
         StorageBuffer: AnyBuffer,
         Image: struct {
             img: *const Image,
@@ -138,11 +141,11 @@ fn updateDescriptorSets(
         self.resolved_bindings[index] = binding;
 
         switch (binding.data) {
-            .Sampler => |tex| {
+            .Sampler => |sampler| {
                 write_infos[index] = .{ .Image = vk.DescriptorImageInfo{
                     .image_layout = .read_only_optimal,
-                    .image_view = tex.view.h_view,
-                    .sampler = tex.h_sampler,
+                    .image_view = sampler.view,
+                    .sampler = sampler.sampler,
                 } };
 
                 writes[index].descriptor_type = .combined_image_sampler;

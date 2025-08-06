@@ -38,6 +38,7 @@ pub const View = struct {
 
 h_img: vk.Image = .null_handle,
 h_mem: vk.DeviceMemory = .null_handle,
+h_sampler: ?vk.Sampler = null,
 
 dev: *const DeviceHandler = undefined,
 
@@ -79,6 +80,52 @@ fn createImageMemory(
     };
 
     return mem;
+}
+
+pub const SamplerConfig = struct {
+    mag_filter: vk.Filter = .linear,
+    min_filter: vk.Filter = .linear,
+    address_mode: vk.SamplerAddressMode = .repeat,
+};
+
+/// ## Notes
+/// * lazily initializes the sampler if it doesnt exist
+/// * the image owns the sampler so no need to destroy it manually
+pub fn getSampler(self: *Self, config: SamplerConfig) !vk.Sampler {
+    if (self.h_sampler) |s| return s;
+    const max_aniso = self.dev.props.limits.max_sampler_anisotropy;
+
+    self.h_sampler = try self.dev.pr_dev.createSampler(&.{
+        .mag_filter = config.mag_filter,
+        .min_filter = config.min_filter,
+
+        .address_mode_u = config.address_mode,
+        .address_mode_v = config.address_mode,
+        .address_mode_w = config.address_mode,
+
+        .anisotropy_enable = vk.TRUE,
+        .max_anisotropy = max_aniso,
+
+        // If address mode is set to border clamping, this is the color the sampler
+        // will return if sampled beyond the image's limits
+        .border_color = .int_opaque_black,
+
+        // As a shader freak, I generally prefer my sampler coordinates to be normalized :}
+        .unnormalized_coordinates = vk.FALSE,
+
+        // Which comparison option to use when sampler filtering occurs
+        // (sometimes helpful for shadow mapping apparently)
+        .compare_enable = vk.FALSE,
+        .compare_op = .always,
+
+        // Mipmapping stuff -- TBD
+        .mipmap_mode = .linear,
+        .mip_lod_bias = 0,
+        .min_lod = 0,
+        .max_lod = 0,
+    }, null);
+
+    return self.h_sampler.?;
 }
 
 pub fn createView(self: *const Self, aspect_mask: vk.ImageAspectFlags) !View {
@@ -206,8 +253,8 @@ pub fn cmdTransitionLayout(
     transition_barrier.dst_access_mask =
         default_dst_access.merge(opts.dst_access_overrides);
 
-    log.debug("src access: {s}", .{transition_barrier.src_access_mask}); 
-    log.debug("dst access: {s}", .{transition_barrier.dst_access_mask}); 
+    log.debug("src access: {s}", .{transition_barrier.src_access_mask});
+    log.debug("dst access: {s}", .{transition_barrier.dst_access_mask});
 
     self.dev.pr_dev.cmdPipelineBarrier(
         cmd_buf.h_cmd_buffer,
@@ -278,7 +325,6 @@ fn copyFromStaging(self: *Self, staging_buf: *StagingBuffer, extent: vk.Extent3D
     };
 
     try copy_cmds.submit(.Graphics, .{});
-
 }
 
 pub fn cmdClear(
@@ -384,9 +430,9 @@ pub fn init(ctx: *const Context, config: Config) !Self {
     return image;
 }
 
-/// creates a texture image and loads it from a provided file
-/// WARN: This is a shit way of differentiating images between textures and other image types
-/// Actually, this is shit in general, like this shit should be in the texture.zig like wtf
+/// creates an image from an image file.
+/// Image parameters will be tuned for usage as a texture 
+/// more so than a general purpose image for now...
 pub fn fromFile(ctx: *const Context, allocator: Allocator, path: []const u8) !Self {
     var image_data = rsh.loadImageFile(path, allocator) catch |err| {
         log.err("Failed to load image: {!}", .{err});
@@ -417,6 +463,10 @@ pub fn fromFile(ctx: *const Context, allocator: Allocator, path: []const u8) !Se
 }
 
 pub fn deinit(self: *const Self) void {
+    if (self.h_sampler) |s| {
+        self.dev.pr_dev.destroySampler(s, null);
+    }
+
     self.dev.pr_dev.destroyImage(self.h_img, null);
     self.dev.pr_dev.freeMemory(self.h_mem, null);
 }
