@@ -20,9 +20,10 @@ one_shot: bool = false,
 
 pub const Config = struct {
     src_queue_family: queue.QueueFamily = .Graphics,
+    one_shot: bool = false,
 };
 
-pub fn init(ctx: *const Context, config: Config) !Self {
+pub fn init(self: *CommandBuffer, ctx: *const Context, config: Config) !void {
     const dev = ctx.env(.dev);
     return initDev(dev, config);
 }
@@ -41,11 +42,18 @@ fn initDev(dev: *const DeviceHandler, config: Config) !Self {
         return err;
     };
 
-    return .{
+    var api_cmd_buf = CommandBuffer{
         .h_cmd_buffer = cmd_buffer,
         .h_cmd_pool = dev.getCommandPool(config.src_queue_family),
         .dev = dev,
     };
+
+    if (config.one_shot) {
+        api_cmd_buf.one_shot = true;
+        api_cmd_buf.beginConfig(.{.one_time_submit_bit = true})
+    }
+
+    return api_cmd_buf;
 }
 
 pub fn oneShot(dev: *const DeviceHandler, config: Config) !Self {
@@ -94,7 +102,7 @@ pub fn submit(self: *const Self, comptime fam: queue.QueueFamily, sync: api.Sync
     );
 }
 
-pub fn deinit(self: *const Self) void {
+pub fn deinit(self: *const CommandBuffer) void {
     // make sure the command buffer isn't in use before destroying it..
     self.dev.waitIdle() catch {};
     self.dev.pr_dev.freeCommandBuffers(
@@ -103,3 +111,35 @@ pub fn deinit(self: *const Self) void {
         util.asManyPtr(vk.CommandBuffer, &self.h_cmd_buffer),
     );
 }
+
+const res = @import("../mem/resource_manager.zig");
+
+pub const CommandBuffer = struct {
+    h_cmd_buffer: vk.CommandBuffer,
+    h_cmd_pool: vk.CommandPool,
+
+    dev: *const DeviceHandler,
+    one_shot: bool = false,
+};
+
+const Entry = res.Registry.AddEntry(.{
+    .state = CommandBuffer,
+    .proxy = CommandBufferProxy,
+}, init, deinit);
+
+pub const CommandBufferProxy = struct {
+    const CommandBufferHandle = res.Handle(CommandBuffer);
+
+    handle: CommandBufferHandle,
+
+    pub const bind = Entry.BindFn;
+    // easier than "Factory.destroyHandle(thing)"
+    pub const deinit = Entry.DeinitFn;
+
+    pub const submit = res.APIFunction(submit);
+    pub const reset = res.APIFunction(reset);
+    pub const begin = res.APIFunction(begin);
+    pub const beginConfig = res.APIFunction(beginConfig);
+    pub const end = res.APIFunction(end);
+};
+
