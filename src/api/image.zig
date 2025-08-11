@@ -349,7 +349,11 @@ pub fn cmdClear(
     );
 }
 
-fn initSelf(self: *Self, dev: *const DeviceHandler, config: Config) !void {
+fn initSelf(
+    self: *Self,
+    dev: *const DeviceHandler,
+    config: Config,
+) !void {
     const image_info = vk.ImageCreateInfo{
         .image_type = .@"2d",
         .extent = .{
@@ -431,7 +435,7 @@ pub fn init(ctx: *const Context, config: Config) !Self {
 }
 
 /// creates an image from an image file.
-/// Image parameters will be tuned for usage as a texture 
+/// Image parameters will be tuned for usage as a texture
 /// more so than a general purpose image for now...
 pub fn fromFile(ctx: *const Context, allocator: Allocator, path: []const u8) !Self {
     var image_data = rsh.loadImageFile(path, allocator) catch |err| {

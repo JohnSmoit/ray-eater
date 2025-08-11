@@ -132,9 +132,9 @@ pub const CommandBufferProxy = struct {
 
     handle: CommandBufferHandle,
 
-    pub const bind = Entry.BindFn;
+    pub const bind = Entry.bindFn;
     // easier than "Factory.destroyHandle(thing)"
-    pub const deinit = Entry.DeinitFn;
+    pub const deinit = Entry.deinitFn;
 
     pub const submit = res.APIFunction(submit);
     pub const reset = res.APIFunction(reset);
