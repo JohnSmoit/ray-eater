@@ -1,4 +1,7 @@
 const std = @import("std");
+const common = @import("common.zig");
+
+const AnyPtr = common.AnyPtr;
 
 pub const HandleType = enum {
     Single,
@@ -13,7 +16,7 @@ pub const OpaqueHandle = struct {
     // type
     // This is sort of not safe, so I'll provide debug functionality to ensure that handles
     // are valid whenever they're acquired.
-    value: *anyopaque,
+    value: AnyPtr,
 
     type_data: union(HandleType) {
         Single,
@@ -21,40 +24,48 @@ pub const OpaqueHandle = struct {
     },
 };
 
-
 const assert = std.debug.assert;
+
 /// Typed handle, with support for derefrence
 pub fn Handle(comptime T: type) type {
     return struct {
         const Self = @This();
         base: OpaqueHandle,
-            
+
         // TODO: Implement this so that you can't just pass any opaque handle --
         // It needs to be guarunteed that the handle bound is of a compatible type
         // -- TO do that, I'll need to implement at least some of the type-scoped allocators
         // first
-        pub fn bindOpaque(self: *Self) void {
+        pub fn bindOpaque(self: *Self, new: OpaqueHandle) void {
+            assert(self.base.value.id == new.value.id);
+            self.base = new;
         }
-        
+
         // these are ease-of-use pseudo-dereference operators
         pub fn get(self: *const Self) *const T {
             assert(self.base.type_data == .Single);
-            return @as(*const T, @ptrCast(self.base.value));
+            return self.base.value.get(T);
         }
 
         pub fn getMut(self: *Self) *T {
             assert(self.base.type_data == .Single);
-            return @as(*T, @ptrCast(self.base.value));
+            return self.base.value.get(T);
         }
 
         pub fn getMulti(self: *const Self) []const T {
             assert(self.base.type_data == .Multi);
-            return @as([*]const T, @ptrCast(self.base.value))[0..self.base.type_data.Multi];
+            return @as(
+                [*]const T,
+                @ptrCast(self.base.value.get(T)),
+            )[0..self.base.type_data.Multi];
         }
 
         pub fn getMultiMut(self: *Self) []T {
             assert(self.base.type_data == .Multi);
-            return @as([*]T, @ptrCast(self.base.value))[0..self.base.type_data.Multi];
+            return @as(
+                [*]T,
+                @ptrCast(self.base.value.get(T)),
+            )[0..self.base.type_data.Multi];
         }
     };
 }
