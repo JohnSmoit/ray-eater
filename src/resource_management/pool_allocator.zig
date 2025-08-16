@@ -199,6 +199,7 @@ pub fn free(self: *Self, item: *anyopaque) void {
 pub fn freeAll(self: *Self) void {
     // Just overwrite the existing free space list with a new one, which will cover the entire pool
     // no leakage issues since the list is stored in-place
+    // of course, existing allocations are all invalidated and can be overwritten whenever now
     self.free_space = FreeSpaceList.init(self.buf, self.config.elem_size);
 }
 
@@ -206,11 +207,12 @@ pub fn freeAll(self: *Self) void {
 /// * Directly passed buffer must respect alginment requirements
 ///   of the state type
 pub fn init(buf: []u8, config: Config) Self {
+    const resolved_size: usize = @min(@sizeOf(FreeSpaceList.ListNode), config.elem_size);
     return .{
         .config = config,
 
         .buf = buf,
-        .free_space = FreeSpaceList.init(buf, config.elem_size),
+        .free_space = FreeSpaceList.init(buf, resolved_size),
     };
 }
 
