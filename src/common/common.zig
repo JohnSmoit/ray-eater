@@ -1,6 +1,10 @@
 const std = @import("std");
 const assert = std.debug.assert;
 
+const h = @import("handle.zig");
+pub const Handle = h.Handle;
+pub const OpaqueHandle = h.OpaqueHandle;
+
 /// This is cursed as hell..
 /// Returns a unique identifier for any type at comptime or runtime
 /// https://github.com/ziglang/zig/issues/19858#issuecomment-2094339450

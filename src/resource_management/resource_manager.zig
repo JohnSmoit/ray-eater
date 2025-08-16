@@ -1,9 +1,8 @@
 const std = @import("std");
 const Self = @This();
 
-const common = @import("common.zig");
+const common = @import("../common/common.zig");
 const Registry = @import("registry.zig");
-const h = @import("handle.zig");
 
 const PoolAllocator = @import("pool_allocator.zig");
 const Allocator = std.mem.Allocator;
@@ -11,8 +10,8 @@ const Allocator = std.mem.Allocator;
 const TypeId = common.TypeId;
 const MemoryPoolsTable = std.AutoHashMap(TypeId, PoolAllocator);
 
-const Handle = h.Handle;
-const OpaqueHandle = h.OpaqueHandle;
+const Handle = common.Handle;
+const OpaqueHandle = common.OpaqueHandle;
 const Predicate = Registry.Predicate;
 
 pub const Config = struct {

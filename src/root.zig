@@ -10,10 +10,10 @@ pub const math = @import("math.zig");
 pub const util = @import("util.zig");
 
 // Resource manager NOTE: (not sure if this should be exported tbh)
-pub const res = @import("res/res.zig");
+pub const res = @import("resource_management/res.zig");
 
 // imports for testing
 comptime {
-    _ = @import("res/pool_allocator.zig");
-    _ = @import("res/registry.zig");
+    _ = @import("resource_management/pool_allocator.zig");
+    _ = @import("resource_management/registry.zig");
 }

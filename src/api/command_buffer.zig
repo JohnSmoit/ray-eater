@@ -112,7 +112,8 @@ pub fn deinit(self: *const Self) void {
     );
 }
 
-const res = @import("../res/res.zig");
+const res = @import("../resource_management/res.zig");
+const common = @import("../common/common.zig");
 
 pub const CommandBuffer = struct {
     h_cmd_buffer: vk.CommandBuffer,
@@ -136,9 +137,9 @@ fn dummyDeinit(self: *const CommandBuffer) void {
     _ = self;
 }
 
-const Registry = @import("../res/res.zig").Registry;
+const Registry = res.Registry;
 pub fn addEntries(reg: *Registry) !void {
-    try reg.AddEntry(.{
+    reg.addEntry(.{
         .state = CommandBuffer,
         .proxy = CommandBufferProxy,
         .init_errors =CommandBufferInitErrors,
@@ -149,7 +150,7 @@ pub fn addEntries(reg: *Registry) !void {
 }
 
 pub const CommandBufferProxy = struct {
-    const CommandBufferHandle = res.Handle(CommandBuffer);
+    const CommandBufferHandle = common.Handle(CommandBuffer);
 
     handle: CommandBufferHandle,
 

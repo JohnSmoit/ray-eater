@@ -5,7 +5,7 @@
 //! This is globally defined and not scoped to an application context
 const std = @import("std");
 
-const common = @import("common.zig");
+const common = @import("../common/common.zig");
 const Context = @import("../context.zig");
 
 const Allocator = std.mem.Allocator;
@@ -94,12 +94,12 @@ pub fn init(allocator: Allocator) !Self {
     };
 }
 
-pub fn AddEntry(
+pub fn addEntry(
     self: *Self,
     comptime config: EntryConfig,
     comptime initFn: InitFnTemplate(config),
     comptime deinitFn: DeinitFnTemplate(config),
-) !void {
+) void {
     const EntryType = RegistryEntryType(config);
 
     const entry = RegistryEntry{
@@ -110,8 +110,9 @@ pub fn AddEntry(
         .type_name = @typeName(config.state),
         .management = config.management,
     };
-
-    try self.entries.append(entry);
+    
+    // If the type registry fails to build, there is literally nothing to be done about it.
+    self.entries.append(entry) catch @panic("Failed to build type registry due to an allocation error!");
 }
 
 pub const PredicateFn = *const fn (*const RegistryEntry) bool;

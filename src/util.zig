@@ -1,3 +1,6 @@
+//! TODO: Merge this into the common directory
+//! Most of this is completely unused and useless, so 
+//! only a bit of this iwll be included...
 const std = @import("std");
 pub fn asCString(rep: anytype) [*:0]const u8 {
     return @as([*:0]const u8, @ptrCast(rep));

@@ -14,7 +14,7 @@
 //! which match vulkan object's lifetimes (generally they are the same per-type of object)
 
 const std = @import("std");
-const common = @import("common.zig");
+const common = @import("../common/common.zig");
 const assert = std.debug.assert;
 
 const Allocator = std.mem.Allocator;

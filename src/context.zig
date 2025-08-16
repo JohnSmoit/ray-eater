@@ -4,7 +4,7 @@ const vk = @import("vulkan");
 const glfw = @import("glfw");
 
 const e = @import("env.zig");
-const res = @import("res/res.zig");
+const res = @import("resource_management/res.zig");
 
 const Allocator = std.mem.Allocator;
 const ExtensionNameList = std.ArrayList([*:0]const u8);
