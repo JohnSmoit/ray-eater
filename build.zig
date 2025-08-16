@@ -178,9 +178,18 @@ fn buildSamples(
 
 /// adds a single module and compile step containing
 /// all included tests (based on specified options)
-fn buildTests(b: *Build, lib_mod: *Module, deps: Dependencies) void {
-    _ = b;
-    _ = lib_mod;
+fn buildTests(b: *Build, lib_mod: *Module, deps: Dependencies, opts: BuildOpts) void {
+    const test_comp = b.addTest(.{
+        .name = "unit tests",
+        .root_module = lib_mod,
+        .target = opts.target,
+    });
+    b.installArtifact(test_comp);
+
+    const test_step = b.addRunArtifact(test_comp);
+    const test_cmd = b.step("run-tests", "run all unit tests");
+    test_cmd.dependOn(&test_step.step);
+
     _ = deps;
 }
 // Although this function looks imperative, note that its job is to
@@ -197,7 +206,7 @@ pub fn build(b: *Build) void {
 
     // handle samples and testing if specified
     buildSamples(b, lib_mod, deps, opts);
-    buildTests(b, lib_mod, deps);
+    buildTests(b, lib_mod, deps, opts);
 
     // zls-friendly check step
     // (which made all the rest of the code way grosser)

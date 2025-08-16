@@ -61,12 +61,11 @@ const FreeSpaceList = struct {
         const n = node orelse return null;
 
         if (n.data.elem_count > count) {
-            const block_size = n.data.elem_count - count;
-            const bytes_size = block_size * self.elem_size;
+            const bytes_size = count * self.elem_size;
             const new_node: *ListNode = @ptrFromInt(@intFromPtr(n) + bytes_size);
 
             new_node.* = .{ .data = .{
-                .elem_count = block_size,
+                .elem_count = n.data.elem_count - count,
             } };
 
             self.free_nodes.prepend(new_node);
@@ -114,7 +113,7 @@ pub fn TypedPool(comptime T: type) type {
             };
 
             return Pool{
-                .inner = Self.initAlloc(allocator, pool_config),
+                .inner = try Self.initAlloc(allocator, pool_config),
             };
         }
 
@@ -202,6 +201,7 @@ pub fn freeAll(self: *Self) void {
     // no leakage issues since the list is stored in-place
     self.free_space = FreeSpaceList.init(self.buf, self.config.elem_size);
 }
+
 /// ## Notes:
 /// * Directly passed buffer must respect alginment requirements
 ///   of the state type
@@ -262,5 +262,5 @@ test "out of memory" {
     defer pool.deinit();
 
     _ = try pool.reserveRange(120);
-    testing.expectError(PoolErrors.OutOfMemory, pool.reserveRange(905));
+    try testing.expectError(PoolErrors.OutOfMemory, pool.reserveRange(905));
 }

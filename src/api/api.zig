@@ -64,4 +64,8 @@ pub const Fence = sync.Fence;
 // shaders
 pub const ShaderModule = sh.Module;
 
-
+// Obtaining RTTI for vulkan API
+const Registry = @import("../res/res.zig").Registry;
+pub fn initRegistry(reg: *Registry) !void {
+    try CommandBuffer.addEntries(reg);
+}

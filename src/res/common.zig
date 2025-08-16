@@ -31,6 +31,15 @@ pub const AnyPtr = struct {
             .id = typeId(T),
         };
     }
+    
+    /// Used if the underlying type is already a pointer
+    pub fn fromDirect(comptime T: type, ptr: T) AnyPtr {
+        return .{
+            // Only reason const cast is here is because I'm probably gonna toss this entire type
+            .ptr = @constCast(ptr),
+            .id = typeId(T),
+        };
+    }
 
     pub fn get(self: AnyPtr, comptime T: type) *T {
         assert(self.id == typeId(T));

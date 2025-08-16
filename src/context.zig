@@ -4,9 +4,11 @@ const vk = @import("vulkan");
 const glfw = @import("glfw");
 
 const e = @import("env.zig");
+const res = @import("res/res.zig");
 
 const Allocator = std.mem.Allocator;
 const ExtensionNameList = std.ArrayList([*:0]const u8);
+const Registry = res.Registry;
 
 const Device = api.DeviceHandler;
 const Instance = api.InstanceHandler;
@@ -54,6 +56,9 @@ compute_queue: api.ComputeQueue,
 
 allocator: Allocator,
 
+resources: res.ResourceManager,
+registry: Registry,
+
 fn ResolveEnvType(comptime field: anytype) type {
     return switch (@TypeOf(field)) {
         void => *const Environment,
@@ -94,6 +99,7 @@ pub const Config = struct {
     dev_extensions: []const [*:0]const u8 = &.{},
     window: *const glfw.Window,
     loader: glfw.GetProcAddrHandler,
+    management: res.ResourceManager.Config,
 };
 
 /// TODO: maybe have an unmanaged variant for more fine-grained user control
@@ -177,6 +183,11 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
 
     new.ctx_env = Environment.init(new);
 
+    new.registry = try Registry.init(allocator);
+    try api.initRegistry(&new.registry);
+
+    new.resources = try res.ResourceManager.init(config.management, new.registry);
+
     return new;
 }
 
@@ -184,6 +195,7 @@ pub fn deinit(self: *Self) void {
     self.dev.deinit();
     self.surf.deinit();
     self.inst.deinit();
+    self.registry.deinit();
 
     const alloc = self.allocator;
     alloc.destroy(self);
