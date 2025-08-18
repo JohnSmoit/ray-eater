@@ -6,8 +6,7 @@ const vk = @import("vulkan");
 const util = @import("../util.zig");
 const uniform = @import("uniform.zig");
 const buffer = @import("buffer.zig");
-
-const many = util.asManyPtr;
+const common = @import("common.zig");
 
 const Allocator = std.mem.Allocator;
 
@@ -35,12 +34,7 @@ fn createDescriptorPool(pr_dev: *const vk.DeviceProxy) !vk.DescriptorPool {
     }, null);
 }
 
-pub const DescriptorType = enum(u8) {
-    Uniform,
-    Sampler,
-    StorageBuffer,
-    Image,
-};
+pub const DescriptorType = common.DescriptorType;
 
 pub const ResolvedBinding = struct {
     stages: vk.ShaderStageFlags,
@@ -77,7 +71,6 @@ pub const Config = struct {
 };
 
 h_desc_layout: vk.DescriptorSetLayout,
-h_desc_pool: vk.DescriptorPool,
 h_desc_set: vk.DescriptorSet,
 pr_dev: *const vk.DeviceProxy,
 allocator: Allocator,
@@ -176,10 +169,9 @@ fn updateDescriptorSets(
 
                 writes[index].descriptor_type = dt;
 
-                writes[index].p_buffer_info = many(
-                    vk.DescriptorBufferInfo,
-                    &write_infos[index].Buffer,
-                );
+                writes[index].p_buffer_info = &.{
+                    write_infos[index].Buffer,
+                };
             },
         }
     }
@@ -194,6 +186,7 @@ fn updateDescriptorSets(
 
 pub fn init(ctx: *const Context, allocator: Allocator, config: Config) !Self {
     const dev: *const DeviceHandler = ctx.env(.dev);
+    var desc_pools = ctx.env(.desc);
 
     var desc_bindings = try allocator.alloc(
         vk.DescriptorSetLayoutBinding,
@@ -213,16 +206,7 @@ pub fn init(ctx: *const Context, allocator: Allocator, config: Config) !Self {
         null,
     );
 
-    const desc_pool = try createDescriptorPool(&dev.pr_dev);
-    errdefer dev.pr_dev.destroyDescriptorPool(desc_pool, null);
-
-    var desc_set = [_]vk.DescriptorSet{.null_handle};
-
-    try dev.pr_dev.allocateDescriptorSets(&.{
-        .descriptor_pool = desc_pool,
-        .descriptor_set_count = 1,
-        .p_set_layouts = many(vk.DescriptorSetLayout, &desc_layout),
-    }, desc_set[0..]);
+    const desc_set = try desc_pools.reserve(config.usage, desc_layout);
 
     // setup the bloody descriptor sets and associate them wit the buffer
     const owned_bindings = try allocator.alloc(
@@ -234,9 +218,8 @@ pub fn init(ctx: *const Context, allocator: Allocator, config: Config) !Self {
 
     var descriptor = Self{
         .h_desc_layout = desc_layout,
-        .h_desc_pool = desc_pool,
         .pr_dev = &dev.pr_dev,
-        .h_desc_set = desc_set[0],
+        .h_desc_set = desc_set,
         .resolved_bindings = owned_bindings,
         .allocator = allocator,
     };
@@ -263,15 +246,16 @@ pub fn bind(
         layout,
         0,
         1,
-        many(vk.DescriptorSet, &self.h_desc_set),
+        &.{self.h_desc_set},
         0,
         null,
     );
 }
 
-pub fn deinit(self: *Self) void {
-    self.pr_dev.destroyDescriptorPool(self.h_desc_pool, null);
-    self.pr_dev.destroyDescriptorSetLayout(self.h_desc_layout, null);
+pub fn deinit(self: *Self, ctx: *const Context) void {
+    var desc_pool = ctx.env(.desc);
+    // this may do nothing depending on usage
+    desc_pool.free(self.usage, self.h_desc_set);
 
     self.allocator.free(self.resolved_bindings);
 }

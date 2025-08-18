@@ -652,17 +652,23 @@ pub const SurfaceHandler = struct {
     h_window: *const glfw.Window = undefined,
     h_surface: vk.SurfaceKHR = .null_handle,
     ctx: *const InstanceHandler = undefined,
+    
+    /// Only reason window is optional is if we don't care
+    /// about presenting to a screen.
+    /// It is on the user to not create types that involve a window
+    /// -- may redo later for easier use and more predictable errors
+    pub fn init(window: ?*const glfw.Window, ctx: *const InstanceHandler) !SurfaceHandler {
+        var surface: vk.SurfaceKHR = .null_handle;
 
-    pub fn init(window: *const glfw.Window, ctx: *const InstanceHandler) !SurfaceHandler {
-        var surface: vk.SurfaceKHR = undefined;
-
-        if (glfw.glfwCreateWindowSurface(ctx.pr_inst.handle, window.handle, null, &surface) != .success) {
-            log.debug("failed to create window surface!", .{});
-            return error.SurfaceCreationFailed;
+        if (window) |w| {
+            if (glfw.glfwCreateWindowSurface(ctx.pr_inst.handle, w.handle, null, &surface) != .success) {
+                log.debug("failed to create window surface!", .{});
+                return error.SurfaceCreationFailed;
+            }
         }
 
         return SurfaceHandler{
-            .h_window = window,
+            .h_window = window orelse undefined,
             .h_surface = surface,
             .ctx = ctx,
         };

@@ -97,7 +97,7 @@ pub fn env(self: *const Self, comptime field: anytype) ResolveEnvType(field) {
 pub const Config = struct {
     inst_extensions: []const [*:0]const u8 = &.{},
     dev_extensions: []const [*:0]const u8 = &.{},
-    window: *const glfw.Window,
+    window: ?*const glfw.Window,
     loader: glfw.GetProcAddrHandler,
     management: res.ResourceManager.Config,
 };
