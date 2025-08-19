@@ -1,7 +1,6 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const rsh = @import("rshc");
-const common = @import("common");
 
 const buf = @import("buffer.zig");
 const util = @import("../util.zig");
@@ -55,47 +54,6 @@ pub const Config = struct {
     clear_col: ?vk.ClearColorValue = null,
     staging_buf: ?*StagingBuffer = null,
     initial_layout: vk.ImageLayout = .undefined,
-
-    // Configuration stuff
-    const config = common.config;
-    const ConfigurationRegistry = config.ConfigurationRegistry;
-
-    pub const Profiles = enum {
-        Texture,
-        Storage,
-        Depth,
-    };
-
-    fn configureStorage(cfg: *Config, params: struct {
-        usage_flags: vk.ImageUsageFlags,
-    }) void {}
-
-    fn resolveExtent(swapchain: *const api.Swapchain) vk.Extent2D {
-        return swapchain.extent;
-    }
-
-    const Registry = ConfigurationRegistry(Config, Profiles, .{
-        .Texture = config.Parameterized(Config{
-            .usage = .{
-                .sampled_bit = true,
-            },
-        }, .{
-            .extent = config.Parameter(vk.Extent2D, "swapchain", resolveExtent),
-        }),
-        .Storage = Config{},
-        .Depth = Config{},
-        .Default = Config{},
-    });
-
-    /// const image_cfg = Image.Config.from(.Texture, .{
-    ///     .swapchain = &my_swapchain,
-    /// });
-    /// const image = api.Image.init(&my_context, allocator, image_config);
-
-    pub const from = Registry.BuilderMixin;
-    // this is either a function or a static ref
-    pub const default = Registry.DefaultMixin;
-    pub const profile = Registry.ProfileMixin;
 };
 
 fn createImageMemory(

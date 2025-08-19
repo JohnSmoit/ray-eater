@@ -113,7 +113,7 @@ pub fn deinit(self: *const Self) void {
 }
 
 const res = @import("../resource_management/res.zig");
-const common = @import("../common/common.zig");
+const common = @import("common");
 
 pub const CommandBuffer = struct {
     h_cmd_buffer: vk.CommandBuffer,

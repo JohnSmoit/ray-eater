@@ -195,13 +195,21 @@ fn buildTests(b: *Build, lib_mod: *Module, deps: Dependencies, opts: BuildOpts) 
         .root_module = lib_mod,
         .target = opts.target,
     });
+
+    const common_tests = b.addTest(.{
+        .name = "common unit tests",
+        .root_module = deps.common,
+        .target = opts.target,
+    });
     b.installArtifact(test_comp);
+    b.installArtifact(common_tests);
 
     const test_step = b.addRunArtifact(test_comp);
+    const common_test_step = b.addRunArtifact(common_tests);
     const test_cmd = b.step("run-tests", "run all unit tests");
+    
     test_cmd.dependOn(&test_step.step);
-
-    _ = deps;
+    test_cmd.dependOn(&common_test_step.step);
 }
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external

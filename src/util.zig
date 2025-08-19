@@ -35,7 +35,7 @@ const StructField = std.builtin.Type.StructField;
 const Function = std.builtin.Type.Fn;
 
 // Reflection Stuff
-pub fn tryGetField(info: *StructInfo, name: []const u8) ?*StructField {
+pub fn tryGetField(info: *const StructInfo, name: []const u8) ?*StructField {
     for (info.fields) |*fld| {
         if (std.mem.eql(u8, fld.name, name) == .eq) {
             return fld;

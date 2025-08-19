@@ -1,7 +1,7 @@
 const std = @import("std");
 const Self = @This();
 
-const common = @import("../common/common.zig");
+const common = @import("common");
 const Registry = @import("registry.zig");
 
 const PoolAllocator = @import("pool_allocator.zig");

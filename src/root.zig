@@ -6,7 +6,8 @@ pub const api = @import("api/api.zig");
 // Linear algebra math
 pub const math = @import("math.zig");
 
-// random common utilities (i.e: "misc")
+//TODO: replace the shitty utils with common
+pub const common = @import("common");
 pub const util = @import("util.zig");
 
 // Resource manager NOTE: (not sure if this should be exported tbh)
