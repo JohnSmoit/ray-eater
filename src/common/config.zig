@@ -98,7 +98,7 @@ pub fn ConfigurationRegistry(
                 const parameters = @field(profile_defs, fld.name).params;
 
                 comptime var ptype_fields: []const std.builtin.Type.StructField = &.{};
-                comptime var resolvers: []const struct {[]const u8, ParameterDef} = &.{};
+                comptime var resolvers: []const struct { []const u8, ParameterDef } = &.{};
 
                 for (parameters) |p| {
                     ptype_fields = ptype_fields ++ [_]std.builtin.Type.StructField{.{
@@ -109,7 +109,7 @@ pub fn ConfigurationRegistry(
                         .alignment = @alignOf(p.InputType),
                     }};
 
-                    resolvers = resolvers ++ .{ .{ p.in_fld_name, p } };
+                    resolvers = resolvers ++ .{.{ p.in_fld_name, p }};
                 }
 
                 const PType = @Type(.{
@@ -145,7 +145,6 @@ pub fn ConfigurationRegistry(
                     @typeName(ConfigType));
             }
         };
-
     }
 
     return struct {
@@ -169,7 +168,16 @@ pub fn ConfigurationRegistry(
             underlying: ConfigType,
             pub fn extend(self: *ConfigBuilder, vals: ConfigType) *ConfigBuilder {
                 inline for (@typeInfo(ConfigType).@"struct".fields) |*fld| {
-                    @field(self.underlying, fld.name) = @field(vals, fld.name);
+                    const default_val = fld.defaultValue();
+                    const in_val = @field(vals, fld.name);
+                    
+                    // This ensures we do not overwrite fields that are left as default values.
+                    if (!std.meta.eql(default_val, in_val)) {
+                        @field(
+                            self.underlying,
+                            fld.name,
+                        ) = @field(vals, fld.name);
+                    }
                 }
 
                 return self;
@@ -202,10 +210,14 @@ pub fn ConfigurationRegistry(
 
                         inline for (ptype_info.fields) |*fld| {
                             const res = rmap.get(fld.name) orelse unreachable;
-                            @field(val, res.out_fld_name) = @as(
-                                *const fn (res.InputType) res.OutputType, 
-                                @ptrCast(@alignCast(res.resolver)))
-                            (@field(params, res.in_fld_name));
+                            const in_val = @field(params, res.in_fld_name);
+
+                            const func = @as(
+                                *const fn (res.InputType) res.OutputType,
+                                @ptrCast(@alignCast(res.resolver)),
+                            );
+
+                            @field(val, res.out_fld_name) = func(in_val);
                         }
                     }
 
@@ -307,11 +319,11 @@ pub fn Parameter(
         else => @compileError("resolver must be a function or null"),
     };
 
-    return IntermediateParam{ 
-        .OutputType = T, 
-        .InputType = InputType, 
-        .in_fld_name = field_name, 
-        .resolver = res, 
+    return IntermediateParam{
+        .OutputType = T,
+        .InputType = InputType,
+        .in_fld_name = field_name,
+        .resolver = res,
     };
 }
 
@@ -404,7 +416,7 @@ const TestConfigStruct = struct {
             .writer = null,
         },
         .PartialA = TestConfigStruct{
-            .flags = .{.bit_1 = true},
+            .flags = .{ .bit_1 = true },
             .comptime_field_a = 999,
         },
         .PartialB = Parameterized(TestConfigStruct{
@@ -506,6 +518,16 @@ test "config (value composition)" {
         .partial_name = "Name Here",
     }).finalize();
 
-
     try testing.expectEqual(res, res2);
+}
+
+test "overwritting values" {
+    var partial_val_builder = TestConfigStruct.from(.PartialA, .{});
+
+    // makes sure composition doesn't overwrite the original values with default values...
+    const config = partial_val_builder.extend(.{
+        .comptime_field_b = 10230,
+    }).finalize();
+
+    try testing.expect(config.comptime_field_a == 999);
 }
