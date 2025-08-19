@@ -15,6 +15,7 @@ const Dependencies = struct {
     rshc: *Module,
     vulkan: *Module,
     glfw: *Module,
+    common: *Module,
 };
 
 fn resolveGLFWSystemDeps(m: *Module) void {
@@ -48,10 +49,17 @@ fn buildDeps(b: *Build, opts: BuildOpts) Dependencies {
 
     resolveGLFWSystemDeps(glfw_mod);
 
+    const common_mod = b.createModule(.{
+        .optimize = opts.optimize,
+        .target = opts.target,
+        .root_source_file = b.path("src/common/common.zig"),
+    });
+
     return .{
         .rshc = rshc_mod,
         .vulkan = vulkan_mod,
         .glfw = glfw_mod,
+        .common = common_mod,
     };
 }
 
@@ -69,6 +77,9 @@ fn buildLibrary(
     });
 
     lib_mod.addImport("vulkan", deps.vulkan);
+    lib_mod.addImport("common", deps.common);
+
+    // Temporary for development
     lib_mod.addImport("rshc", deps.rshc);
     lib_mod.addImport("glfw", deps.glfw);
 

@@ -82,10 +82,15 @@ pub const Config = struct {
         }, .{
             .extent = config.Parameter(vk.Extent2D, "swapchain", resolveExtent),
         }),
-        .Storage = configureStorage,
+        .Storage = Config{},
         .Depth = Config{},
         .Default = Config{},
     });
+
+    /// const image_cfg = Image.Config.from(.Texture, .{
+    ///     .swapchain = &my_swapchain,
+    /// });
+    /// const image = api.Image.init(&my_context, allocator, image_config);
 
     pub const from = Registry.BuilderMixin;
     // this is either a function or a static ref

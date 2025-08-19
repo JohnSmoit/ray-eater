@@ -68,3 +68,8 @@ pub const AnyPtr = struct {
 /// I need right now
 pub fn APIFunction(func: anytype) APIFunctionType(func) {
 }
+
+
+comptime {
+    _ = @import("config.zig");
+}
