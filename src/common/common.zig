@@ -5,6 +5,9 @@ const h = @import("handle.zig");
 pub const Handle = h.Handle;
 pub const OpaqueHandle = h.OpaqueHandle;
 
+pub const config = @import("config.zig");
+pub const util = @import("util.zig");
+
 /// This is cursed as hell..
 /// Returns a unique identifier for any type at comptime or runtime
 /// https://github.com/ziglang/zig/issues/19858#issuecomment-2094339450
@@ -64,4 +67,9 @@ pub const AnyPtr = struct {
 /// or just not automating API function binding since there isn't that much extra code
 /// I need right now
 pub fn APIFunction(func: anytype) APIFunctionType(func) {
+}
+
+
+comptime {
+    _ = @import("config.zig");
 }
