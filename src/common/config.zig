@@ -43,7 +43,6 @@ fn validateDef(
     return @typeInfo(@TypeOf(def)).@"struct".fields;
 }
 
-
 pub const ParameterDef = struct {
     OutputType: type,
     out_fld_name: [:0]const u8,
@@ -106,7 +105,7 @@ pub fn ConfigurationRegistry(
                         .type = p.InputType,
                     }};
 
-                    resolvers = resolvers ++ .{p.in_fld_name, p};
+                    resolvers = resolvers ++ .{ p.in_fld_name, p };
                 }
 
                 const PType = @Type(.{
@@ -194,13 +193,9 @@ pub fn ConfigurationRegistry(
 
                         inline for (ptype_info.fields) |*fld| {
                             const res = rmap.get(fld.name) orelse unreachable;
-                            @field(val, res.out_fld_name) = @as(*const fn (
-                                res.InputType
-                            ) res.OutputType, @ptrCast(@alignCast(res.resolver)))(
-                                @field(params, res.in_fld_name)
-                            );
+                            @field(val, res.out_fld_name) = @as(*const fn (res.InputType) res.OutputType, @ptrCast(@alignCast(res.resolver)))(@field(params, res.in_fld_name));
                         }
-                    } 
+                    }
 
                     break :blk val;
                 },
@@ -217,7 +212,6 @@ pub fn ConfigurationRegistry(
         }
     };
 }
-
 
 fn ParameterizedProfileDef(comptime ConfigType: type) type {
     return struct {
@@ -304,10 +298,196 @@ pub fn Parameter(
     return .{ T, InputType, field_name, res };
 }
 
-test "config (default value)" {}
+const testing = std.testing;
 
-test "config (profile)" {}
+const TestBitField = packed struct {
+    bit_1: bool = false,
+    bit_2: bool = false,
+    bit_3: bool = false,
+    rest: u5 = 0,
+};
 
-test "config (parameterized profile)" {}
+const TestConfigStruct = struct {
+    flags: TestBitField = .{},
 
-test "config (value composition)" {}
+    comptime_field_a: u32 = 0,
+    comptime_field_b: usize = 0,
+    name: []const u8 = undefined,
+
+    pointer: *const usize = undefined,
+    writer: ?std.io.AnyWriter = null,
+
+    pub const Profiles = enum {
+        Larry,
+        Harry,
+        WriterBoy,
+        PartialA,
+        PartialB,
+    };
+
+    const larry_last_name_table = [_][]const u8{
+        "Larry Larryson",
+        "Larry Jerryson",
+        "Larry The Lobster",
+        "Larry the Platypus",
+    };
+
+    fn resolveLarryName(index: usize) []const u8 {
+        return larry_last_name_table[@mod(index, larry_last_name_table.len)];
+    }
+
+    fn sideEffectyResolver(w: std.io.AnyWriter) std.io.AnyWriter {
+        w.write("Evil function") catch @panic("Test write failed");
+        return w;
+    }
+
+    pub const larrys_num: usize = 1000;
+
+    const Registry = ConfigurationRegistry(TestConfigStruct, Profiles, .{
+        .Harry = TestConfigStruct{
+            .flags = .{
+                .bit_1 = true,
+                .bit_2 = false,
+                .bit_3 = true,
+                .rest = 10,
+            },
+            .comptime_field_a = 100,
+            .comptime_field_b = 0,
+            .name = "Harry Harryson",
+
+            .pointer = &larrys_num,
+            .writer = null,
+        },
+        .Larry = Parameterized(TestConfigStruct{
+            .flags = .{},
+            .comptime_field_a = 6291,
+            .writer = null,
+        }, .{
+            .comptime_field_b = Parameter(usize, "larry_bank_id", null),
+            .name = Parameter([]const u8, "larry_name_id", resolveLarryName),
+            .pointer = Parameter(*const usize, "larry_number", null),
+        }),
+        .WriterBoy = Parameterized(TestConfigStruct{
+            .name = "Writer Boy",
+        }, .{
+            .writer = Parameter(std.io.AnyWriter, "some_writer", sideEffectyResolver),
+        }),
+        .Default = TestConfigStruct{
+            .flags = .{
+                .bit_1 = false,
+                .bit_2 = true,
+                .bit_3 = false,
+                .rest = 2,
+            },
+            .comptime_field_a = 123,
+            .comptime_field_b = 320432,
+            .name = "Default",
+
+            .pointer = &larrys_num,
+            .writer = null,
+        },
+        .PartialA = TestConfigStruct{
+            .flags = .{.bit_1 = true},
+            .comptime_field_a = 999,
+        },
+        .PartialB = Parameterized(TestConfigStruct{
+            .comptime_field_b = 998,
+            .pointer = &larrys_num,
+            .writer = null,
+        }, .{
+            .name = Parameter([]const u8, "partial_name", null),
+        }),
+    });
+
+    const from = Registry.BuilderMixin;
+    const profile = Registry.ProfileMixin;
+    const default = Registry.DefaultMixin;
+};
+
+test "config (default value)" {
+    const default = TestConfigStruct.default(.{});
+
+    try testing.expectEqual(default, TestConfigStruct{
+        .flags = .{
+            .bit_1 = false,
+            .bit_2 = true,
+            .bit_3 = false,
+            .rest = 2,
+        },
+        .comptime_field_a = 123,
+        .comptime_field_b = 320432,
+        .name = "Default",
+
+        .pointer = &TestConfigStruct.larrys_num,
+        .writer = null,
+    });
+}
+
+test "config (profile)" {
+    const profile = TestConfigStruct.profile(.Harry, .{});
+
+    try testing.expectEqual(profile, TestConfigStruct{
+        .flags = .{
+            .bit_1 = true,
+            .bit_2 = false,
+            .bit_3 = true,
+            .rest = 10,
+        },
+        .comptime_field_a = 100,
+        .comptime_field_b = 0,
+        .name = "Harry Harryson",
+
+        .pointer = &TestConfigStruct.larrys_num,
+        .writer = null,
+    });
+}
+
+test "config (parameterized profile)" {
+    const string: [64]u8 = .{};
+    var stream = std.io.fixedBufferStream(string);
+
+    const larry_num: usize = 12321;
+
+    const val = TestConfigStruct.profile(.Larry, .{
+        .larry_bank_id = 943,
+        .larry_name_id = 1,
+        .larry_number = 293,
+    });
+
+    try testing.expectEqual(val, TestConfigStruct{
+        .flags = .{},
+        .comptime_field_a = 6291,
+        .writer = null,
+        .comptime_field_b = 943,
+        .name = "Larry Jerryson",
+        .pointer = &larry_num,
+    });
+
+    const writer_val = TestConfigStruct.profile(.WriterBoy, .{
+        .some_writer = stream.writer(),
+    });
+
+    try testing.expectEqual(writer_val, TestConfigStruct{
+        .name = "Writer Boy",
+        .writer = stream.writer(),
+    });
+
+    try testing.expectEqualSlices(u8, string[0..("Writer Boy").len], "Writer Boy");
+}
+
+test "config (value composition)" {
+    var val_a_b = TestConfigStruct.from(.PartialA, .{});
+    const res = val_a_b.extend(.{
+        .comptime_field_b = 998,
+        .pointer = &TestConfigStruct.larrys_num,
+        .writer = null,
+        .name = "Name Here",
+    }).finalize();
+
+    const res2 = val_a_b.combine(.PartialB, .{
+        .partial_name = "Name Here",
+    });
+
+
+    try testing.expectEqual(res, res2);
+}
