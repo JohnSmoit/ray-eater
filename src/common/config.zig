@@ -8,7 +8,7 @@ fn validateProfiles(
     comptime Hint: type,
 ) std.builtin.Type.Enum {
     const pinfo = @typeInfo(T);
-    if (!pinfo == .@"enum")
+    if (pinfo != .@"enum")
         @compileError("Invalid profile listing enum: " ++
             @typeName(T) ++ " for config type: " ++ @typeName(Hint));
 
@@ -26,13 +26,13 @@ fn validateDef(
         .@"struct" => |*s| {
             const pinfo = @typeInfo(T).@"enum";
             for (pinfo.fields) |fld| {
-                if (!util.tryGetField(s, fld.name)) {
+                if (util.tryGetField(s, fld.name) == null) {
                     @compileError("Profile def missing field: " ++
                         fld.name ++ " for config type: " ++ @typeName(Hint));
                 }
             }
 
-            if (!util.tryGetField(s, "Default")) {
+            if (util.tryGetField(s, "Default") == null) {
                 @compileError("Profile def missing default field " ++
                     " for config type: " ++ @typeName(Hint));
             }
@@ -49,13 +49,13 @@ pub const ParameterDef = struct {
     in_fld_name: [:0]const u8,
 
     InputType: type,
-    resolver: *anyopaque,
+    resolver: *const anyopaque,
 };
 
 fn ProfileDef(comptime ConfigType: type) type {
     return union(enum) {
         Valued: struct {
-            PType: type,
+            PType: ?type,
             default_val: ConfigType,
             // map from field names to all resolver functions (built from param data)
             resolvers: ?std.StaticStringMap(ParameterDef),
@@ -79,12 +79,13 @@ pub fn ConfigurationRegistry(
     const profile_info = validateProfiles(Profiles, ConfigType);
     const def_fields = validateDef(Profiles, profile_defs, ConfigType);
 
-    const profiles_len = profile_info.fields.len;
+    // Extra field for the default profile
+    const profiles_len = profile_info.fields.len + 1;
     const ProfileDefType = ProfileDef(ConfigType);
-    comptime var profiles: [profiles_len]ProfileDefType = .{};
+    comptime var profiles: [profiles_len]ProfileDefType = .{undefined} ** profiles_len;
 
     for (def_fields) |fld| {
-        const field_index: usize = if (std.mem.eql(fld.name, "Default") == .eq)
+        const field_index: usize = if (!std.mem.eql(u8, fld.name, "Default"))
             @intFromEnum(std.meta.stringToEnum(
                 Profiles,
                 fld.name,
@@ -96,21 +97,27 @@ pub fn ConfigurationRegistry(
             ParameterizedProfileDef(ConfigType) => blk: {
                 const parameters = @field(profile_defs, fld.name).params;
 
-                comptime var ptype_fields: []std.builtin.Type.StructField = &.{};
-                comptime var resolvers = .{};
+                comptime var ptype_fields: []const std.builtin.Type.StructField = &.{};
+                comptime var resolvers: []const struct {[]const u8, ParameterDef} = &.{};
 
                 for (parameters) |p| {
                     ptype_fields = ptype_fields ++ [_]std.builtin.Type.StructField{.{
-                        .name = p.fld_name,
+                        .name = p.in_fld_name,
                         .type = p.InputType,
+                        .default_value_ptr = null,
+                        .is_comptime = false,
+                        .alignment = @alignOf(p.InputType),
                     }};
 
-                    resolvers = resolvers ++ .{ p.in_fld_name, p };
+                    resolvers = resolvers ++ .{ .{ p.in_fld_name, p } };
                 }
 
                 const PType = @Type(.{
                     .@"struct" = std.builtin.Type.Struct{
                         .fields = ptype_fields,
+                        .decls = &.{},
+                        .is_tuple = false,
+                        .layout = .auto,
                     },
                 });
 
@@ -138,11 +145,12 @@ pub fn ConfigurationRegistry(
                     @typeName(ConfigType));
             }
         };
+
     }
 
     return struct {
         const Self = @This();
-        const profile_data: []const ProfileDef = profiles[0..profiles_len];
+        const profile_data: [profiles_len]ProfileDefType = profiles;
         const default_index = profiles_len - 1;
         // TODO: Check presence of fields
         // and make sure the params are a struct literal.
@@ -161,13 +169,13 @@ pub fn ConfigurationRegistry(
             underlying: ConfigType,
             pub fn extend(self: *ConfigBuilder, vals: ConfigType) *ConfigBuilder {
                 inline for (@typeInfo(ConfigType).@"struct".fields) |*fld| {
-                    @field(self.underlying, fld.name) = @field(vals, fld.nam);
+                    @field(self.underlying, fld.name) = @field(vals, fld.name);
                 }
 
                 return self;
             }
 
-            pub fn combine(self: *ConfigBuilder, profile: Profiles, params: anytype) *ConfigBuilder {
+            pub fn combine(self: *ConfigBuilder, comptime profile: Profiles, params: anytype) *ConfigBuilder {
                 const other = Self.ProfileMixin(profile, params);
                 return self.extend(other);
             }
@@ -177,23 +185,27 @@ pub fn ConfigurationRegistry(
             }
         };
 
-        pub fn BuilderMixin(profile: Profiles, params: anytype) ConfigBuilder {
+        pub fn BuilderMixin(comptime profile: Profiles, params: anytype) ConfigBuilder {
             return .{
                 .underlying = setFromProfileIndex(@intFromEnum(profile), params),
             };
         }
 
-        fn setFromProfileIndex(index: usize, params: anytype) ConfigType {
+        fn setFromProfileIndex(comptime index: usize, params: anytype) ConfigType {
             const profile_def = profile_data[index];
             return switch (profile_def) {
                 .Valued => |*v| blk: {
                     var val: ConfigType = v.default_val;
                     if (v.resolvers) |rmap| {
-                        const ptype_info = @typeInfo(v.PType).@"struct";
+                        // PType is only null if there are no resolver methods...
+                        const ptype_info = @typeInfo(v.PType orelse unreachable).@"struct";
 
                         inline for (ptype_info.fields) |*fld| {
                             const res = rmap.get(fld.name) orelse unreachable;
-                            @field(val, res.out_fld_name) = @as(*const fn (res.InputType) res.OutputType, @ptrCast(@alignCast(res.resolver)))(@field(params, res.in_fld_name));
+                            @field(val, res.out_fld_name) = @as(
+                                *const fn (res.InputType) res.OutputType, 
+                                @ptrCast(@alignCast(res.resolver)))
+                            (@field(params, res.in_fld_name));
                         }
                     }
 
@@ -207,7 +219,7 @@ pub fn ConfigurationRegistry(
             return setFromProfileIndex(default_index, params);
         }
 
-        pub fn ProfileMixin(profile: Profiles, params: anytype) ConfigType {
+        pub fn ProfileMixin(comptime profile: Profiles, params: anytype) ConfigType {
             return setFromProfileIndex(@intFromEnum(profile), params);
         }
     };
@@ -216,7 +228,7 @@ pub fn ConfigurationRegistry(
 fn ParameterizedProfileDef(comptime ConfigType: type) type {
     return struct {
         params: []const ParameterDef,
-        default_value: ConfigType,
+        default_val: ConfigType,
     };
 }
 
@@ -224,29 +236,29 @@ pub fn Parameterized(
     comptime instance: anytype,
     comptime params: anytype,
 ) ParameterizedProfileDef(@TypeOf(instance)) {
-    if (@typeInfo(@TypeOf(params)) == .@"struct")
+    if (@typeInfo(@TypeOf(params)) != .@"struct")
         @compileError("Invalid parameterset type (must be struct) " ++
-            @typeName(instance));
+            @typeName(@TypeOf(instance)));
 
     const pinfo = @typeInfo(@TypeOf(params)).@"struct";
-    comptime var params2: []ParameterDef = &.{};
+    comptime var params_list: []const ParameterDef = &.{};
 
     for (pinfo.fields) |fld| {
-        const val = @field(pinfo, fld.name);
+        const val = @field(params, fld.name);
 
-        params2 = params2 ++ [_]ParameterDef{.{
+        params_list = params_list ++ [_]ParameterDef{.{
             .out_fld_name = fld.name,
 
-            .OutputType = val.@"0",
-            .InputType = val.@"1",
-            .in_fld_name = val.@"2",
-            .resolver = val.@"3",
+            .OutputType = val.OutputType,
+            .InputType = val.InputType,
+            .in_fld_name = val.in_fld_name,
+            .resolver = val.resolver,
         }};
     }
 
     return .{
-        .params = params2,
-        .default_value = instance,
+        .params = params_list,
+        .default_val = instance,
     };
 }
 
@@ -257,10 +269,10 @@ pub fn Parameterized(
 // This is mostly for usage ergonomics, there's no actual implementation reason
 // that it has to be this way.
 const IntermediateParam = struct {
-    InputType: type,
     OutputType: type,
-    in_field_name: [:0]const u8,
-    resolver: *anyopaque,
+    InputType: type,
+    in_fld_name: [:0]const u8,
+    resolver: *const anyopaque,
 };
 
 //Parameters can be either:
@@ -271,7 +283,7 @@ pub fn Parameter(
     comptime T: type,
     comptime field_name: [:0]const u8,
     comptime resolver: anytype,
-) std.meta.Tuple(&.{ type, type, [:0]const u8, *anyopaque }) {
+) IntermediateParam {
     const ResolverType = @TypeOf(resolver);
     const rinfo = @typeInfo(ResolverType);
 
@@ -281,7 +293,7 @@ pub fn Parameter(
                 @compileError("Resolver functions must take a single argument");
             const input_arg = f.params[0];
 
-            break :blk .{ input_arg.type, resolver };
+            break :blk .{ input_arg.type.?, resolver };
         },
         .null => blk: {
             const Container = struct {
@@ -295,7 +307,12 @@ pub fn Parameter(
         else => @compileError("resolver must be a function or null"),
     };
 
-    return .{ T, InputType, field_name, res };
+    return IntermediateParam{ 
+        .OutputType = T, 
+        .InputType = InputType, 
+        .in_fld_name = field_name, 
+        .resolver = res, 
+    };
 }
 
 const testing = std.testing;
@@ -312,9 +329,9 @@ const TestConfigStruct = struct {
 
     comptime_field_a: u32 = 0,
     comptime_field_b: usize = 0,
-    name: []const u8 = undefined,
+    name: []const u8 = "Unknown",
 
-    pointer: *const usize = undefined,
+    pointer: *const usize = &larrys_num,
     writer: ?std.io.AnyWriter = null,
 
     pub const Profiles = enum {
@@ -337,7 +354,7 @@ const TestConfigStruct = struct {
     }
 
     fn sideEffectyResolver(w: std.io.AnyWriter) std.io.AnyWriter {
-        w.write("Evil function") catch @panic("Test write failed");
+        _ = w.write("Evil function") catch @panic("Test write failed");
         return w;
     }
 
@@ -443,15 +460,16 @@ test "config (profile)" {
 }
 
 test "config (parameterized profile)" {
-    const string: [64]u8 = .{};
-    var stream = std.io.fixedBufferStream(string);
+    var string: [64]u8 = .{0} ** 64;
+    var stream = std.io.fixedBufferStream(string[0..]);
+    var w = stream.writer();
 
     const larry_num: usize = 12321;
 
     const val = TestConfigStruct.profile(.Larry, .{
         .larry_bank_id = 943,
         .larry_name_id = 1,
-        .larry_number = 293,
+        .larry_number = &larry_num,
     });
 
     try testing.expectEqual(val, TestConfigStruct{
@@ -464,15 +482,15 @@ test "config (parameterized profile)" {
     });
 
     const writer_val = TestConfigStruct.profile(.WriterBoy, .{
-        .some_writer = stream.writer(),
+        .some_writer = w.any(),
     });
 
     try testing.expectEqual(writer_val, TestConfigStruct{
         .name = "Writer Boy",
-        .writer = stream.writer(),
+        .writer = w.any(),
     });
 
-    try testing.expectEqualSlices(u8, string[0..("Writer Boy").len], "Writer Boy");
+    try testing.expectEqualSlices(u8, string[0..("Evil function").len], "Evil function");
 }
 
 test "config (value composition)" {
@@ -486,7 +504,7 @@ test "config (value composition)" {
 
     const res2 = val_a_b.combine(.PartialB, .{
         .partial_name = "Name Here",
-    });
+    }).finalize();
 
 
     try testing.expectEqual(res, res2);
