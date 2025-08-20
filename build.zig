@@ -15,6 +15,7 @@ const Dependencies = struct {
     rshc: *Module,
     vulkan: *Module,
     glfw: *Module,
+    common: *Module,
 };
 
 fn resolveGLFWSystemDeps(m: *Module) void {
@@ -48,10 +49,17 @@ fn buildDeps(b: *Build, opts: BuildOpts) Dependencies {
 
     resolveGLFWSystemDeps(glfw_mod);
 
+    const common_mod = b.createModule(.{
+        .optimize = opts.optimize,
+        .target = opts.target,
+        .root_source_file = b.path("src/common/common.zig"),
+    });
+
     return .{
         .rshc = rshc_mod,
         .vulkan = vulkan_mod,
         .glfw = glfw_mod,
+        .common = common_mod,
     };
 }
 
@@ -69,6 +77,9 @@ fn buildLibrary(
     });
 
     lib_mod.addImport("vulkan", deps.vulkan);
+    lib_mod.addImport("common", deps.common);
+
+    // Temporary for development
     lib_mod.addImport("rshc", deps.rshc);
     lib_mod.addImport("glfw", deps.glfw);
 
@@ -184,13 +195,21 @@ fn buildTests(b: *Build, lib_mod: *Module, deps: Dependencies, opts: BuildOpts) 
         .root_module = lib_mod,
         .target = opts.target,
     });
+
+    const common_tests = b.addTest(.{
+        .name = "common unit tests",
+        .root_module = deps.common,
+        .target = opts.target,
+    });
     b.installArtifact(test_comp);
+    b.installArtifact(common_tests);
 
     const test_step = b.addRunArtifact(test_comp);
+    const common_test_step = b.addRunArtifact(common_tests);
     const test_cmd = b.step("run-tests", "run all unit tests");
+    
     test_cmd.dependOn(&test_step.step);
-
-    _ = deps;
+    test_cmd.dependOn(&common_test_step.step);
 }
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external

@@ -5,7 +5,7 @@
 //! This is globally defined and not scoped to an application context
 const std = @import("std");
 
-const common = @import("../common/common.zig");
+const common = @import("common");
 const Context = @import("../context.zig");
 
 const Allocator = std.mem.Allocator;
