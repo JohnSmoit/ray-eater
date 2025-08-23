@@ -52,9 +52,10 @@ const BufInterface = buf.AnyBuffer;
 
 pub const Descriptor = @import("descriptor.zig");
 pub const ResolvedDescriptorBinding = Descriptor.ResolvedBinding;
+pub const DescriptorPool = @import("descriptor_pool.zig");
 
 // additional utility structs and stuff
-const types = @import("types.zig");
+const types = @import("common_types.zig");
 pub const SyncInfo = types.SyncInfo;
 
 // sync stuff
@@ -66,6 +67,7 @@ pub const ShaderModule = sh.Module;
 
 // Obtaining RTTI for vulkan API
 const Registry = @import("../resource_management/res.zig").Registry;
+
 pub fn initRegistry(reg: *Registry) !void {
     try CommandBuffer.addEntries(reg);
 }

@@ -200,6 +200,9 @@ pub fn free(self: *Self, item: *anyopaque) void {
 /// It's not a slice because you cant directly have slices
 /// whose underling type is unknown (opaque).
 pub fn freeRange(self: *Self, items: *anyopaque, count: usize) void {
+    _ = self;
+    _ = items;
+    _ = count;
 }
 
 pub fn freeAll(self: *Self) void {

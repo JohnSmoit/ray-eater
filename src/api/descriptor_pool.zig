@@ -6,7 +6,7 @@
 //! These hints will encompass either the lifetime of the descriptor set and/or
 //! the actual makeup of descriptors.
 
-const common = @import("common.zig");
+const common = @import("common_types.zig");
 const vk = @import("vulkan");
 const std = @import("std");
 const api = @import("api.zig");

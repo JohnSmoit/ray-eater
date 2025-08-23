@@ -6,7 +6,7 @@ const vk = @import("vulkan");
 const util = @import("../util.zig");
 const uniform = @import("uniform.zig");
 const buffer = @import("buffer.zig");
-const common = @import("common.zig");
+const common = @import("common_types.zig");
 
 const Allocator = std.mem.Allocator;
 

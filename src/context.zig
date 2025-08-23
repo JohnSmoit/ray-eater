@@ -140,10 +140,7 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
 
     // Initialize Instance and device from parameters
     // Later on, I'll have some better ways to handle ownership and lifetimes
-    // then just raw heap allocations lol
-
-    // Would be great if errdefers worked in initializers... because I like keeping initialization
-    // in initializers when I can
+    // then just raw heap allocations lol (Working on it)
 
     new.inst = try Instance.init(&.{
         .instance = .{
