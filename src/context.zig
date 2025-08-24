@@ -97,7 +97,7 @@ pub fn env(self: *const Self, comptime field: anytype) ResolveEnvType(field) {
 pub const Config = struct {
     inst_extensions: []const [*:0]const u8 = &.{},
     dev_extensions: []const [*:0]const u8 = &.{},
-    window: ?*const glfw.Window,
+    window: ?*const glfw.Window = null,
     loader: glfw.GetProcAddrHandler,
     management: res.ResourceManager.Config,
 };
@@ -183,7 +183,7 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
     new.registry = try Registry.init(allocator);
     try api.initRegistry(&new.registry);
 
-    new.resources = try res.ResourceManager.init(config.management, new.registry);
+    new.resources = try res.ResourceManager.init(config.management, &new.registry);
 
     return new;
 }
@@ -226,3 +226,30 @@ pub fn presentFrame(
     const image = swapchain.image_index;
     try self.present_queue.present(swapchain, image, sync.sem_wait);
 }
+
+//BUG: This cannot work since windowless contexts would require
+//a lot more features that I currently support
+// test "windowless context" {
+//     var allocator = std.heap.DebugAllocator(.{
+//         .safety = true,
+//     }).init;
+//     defer {
+//         _ = allocator.detectLeaks();
+//         if (allocator.deinit() != .ok) {
+//             std.debug.print("Oppsies\n", .{});
+//         }
+//     }
+//     try glfw.init();
+// 
+//     const extensions = glfw.instanceExtensions();
+// 
+//     var ctx = try Self.init(allocator.allocator(), .{
+//         .inst_extensions = extensions,
+//         .loader = glfw.glfwGetInstanceProcAddress,
+//         .management = .{
+//             .allocator = allocator.allocator(),
+//             .pool_sizes = 1024,
+//         },
+//     });
+//     defer ctx.deinit();
+// }

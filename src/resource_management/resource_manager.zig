@@ -21,14 +21,15 @@ pub const Config = struct {
 
 pools: MemoryPoolsTable,
 
-pub fn init(config: Config, registry: Registry) !Self {
-    // loop through each API registry entry 
+pub fn init(config: Config, registry: *Registry) !Self {
+    // loop through each API registry entry
     // and initialize the table with a pool for each entry
     // whose management strategy is tagged as "Pooled"
-    
-    const entries = registry.select()
+
+    var entries_iter = registry.select();
+    var entries = entries_iter
         .where(Predicate.ManagementModeIs(.Pooled))
-    .iterator();
+        .iterator();
 
     var table = MemoryPoolsTable.init(config.allocator);
 
@@ -39,7 +40,8 @@ pub fn init(config: Config, registry: Registry) !Self {
             .elem_count = config.pool_sizes,
         };
 
-        try table.put(entry.id, 
+        try table.put(
+            entry.type_id,
             try PoolAllocator.initAlloc(config.allocator, pool_config),
         );
     }
