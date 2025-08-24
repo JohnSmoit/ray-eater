@@ -81,7 +81,7 @@ pub fn initSelf(self: *Self, ctx: *const Context, allocator: Allocator, config: 
         },
         .viewport = .{ .Swapchain = config.swapchain },
         .descriptors = if (config.frag_descriptors) |fd| &.{
-            fd.h_desc_layout,
+            fd.vkLayout(),
         } else &.{},
     });
     defer fixed_functions_config.deinit();
@@ -119,7 +119,7 @@ pub fn drawOneShot(self: *const Self, cmd_buf: *const CommandBuffer, framebuffer
     self.renderpass.begin(cmd_buf, framebuffer, image_index);
 
     if (self.desc) |d| {
-        d.bind(cmd_buf, self.pipeline.h_pipeline_layout, .{});
+        d.use(cmd_buf, self.pipeline.h_pipeline_layout, .{});
     }
 
     self.dev.draw(cmd_buf, 6, 1, 0, 0);

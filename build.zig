@@ -191,13 +191,13 @@ fn buildSamples(
 /// all included tests (based on specified options)
 fn buildTests(b: *Build, lib_mod: *Module, deps: Dependencies, opts: BuildOpts) void {
     const test_comp = b.addTest(.{
-        .name = "unit tests",
+        .name = "unit_tests",
         .root_module = lib_mod,
         .target = opts.target,
     });
 
     const common_tests = b.addTest(.{
-        .name = "common unit tests",
+        .name = "common_unit_tests",
         .root_module = deps.common,
         .target = opts.target,
     });
