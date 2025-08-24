@@ -291,25 +291,3 @@ pub fn freeRange(
     }
 }
 
-const glfw = @import("glfw");
-
-test "transient allocations" {
-    var alloc = std.heap.DebugAllocator(.{
-        .safety = true,
-        .enable_memory_limit = true,
-    });
-    var test_ctx = try Context.init(alloc.allocator(), .{
-        .management = .{
-            .allocator = alloc.allocator(),
-            .pool_sizes = 1024,
-        },
-        .inst_extensions = glfw.instanceExtensions(),
-        .loader = glfw.glfwGetInstanceProcAddress,
-        .window = null,
-    });
-
-    var pool = test_ctx.env(.desc);
-
-    const d = pool.reserve(
-    pool.resetTransient();
-}

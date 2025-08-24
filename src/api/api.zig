@@ -8,6 +8,7 @@ const ind_buf = @import("index_buffer.zig");
 const sh = @import("shader.zig");
 const uni_buf = @import("uniform.zig");
 const vert_buf = @import("vertex_buffer.zig");
+const common = @import("common_types.zig");
 
 // direct vulkan-zig imports
 pub const GlobalInterface = vk.BaseWrapper;
@@ -48,11 +49,13 @@ pub const ComptimeVertexBuffer = vert_buf.VertexBuffer;
 pub const ComptimeIndexBuffer = ind_buf.IndexBuffer;
 pub const ComptimeUniformBuffer = uni_buf.UniformBuffer;
 pub const ComptimeStorageBuffer = @import("storage_buffer.zig").ComptimeStorageBuffer;
-const BufInterface = buf.AnyBuffer;
+pub const BufInterface = buf.AnyBuffer;
 
 pub const Descriptor = @import("descriptor.zig");
 pub const ResolvedDescriptorBinding = Descriptor.ResolvedBinding;
 pub const DescriptorPool = @import("descriptor_pool.zig");
+pub const DescriptorType = common.DescriptorType;
+pub const DescriptorUsageInfo = common.DescriptorUsageInfo;
 
 // additional utility structs and stuff
 const types = @import("common_types.zig");

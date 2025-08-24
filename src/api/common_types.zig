@@ -44,4 +44,8 @@ pub const DescriptorType = enum(u8) {
             .Image => .storage_image,
         };
     }
+
+    pub fn toIndex(self: DescriptorType) usize {
+        return @intFromEnum(self);
+    }
 };

@@ -9,6 +9,7 @@ const Context = @import("../context.zig");
 const AnyBuffer = buf_api.AnyBuffer;
 const GenericBuffer = buf_api.GenericBuffer;
 
+/// More like undefined behaviour object LMAO
 pub fn UniformBuffer(T: type) type {
     return struct {
         const Self = @This();
