@@ -12,7 +12,7 @@ pub const DescriptorUsageInfo = packed struct {
     /// THis just directly controls which pool the descriptor is 
     /// allocated into. For the moment, all descriptors will be
     /// either transient or application scoped
-    pub const LifetimeScope = enum {
+    pub const LifetimeScope = enum(u3) {
         /// descriptor exists for just a single frame
         /// which places it into the "transient" pool
         Transient, 

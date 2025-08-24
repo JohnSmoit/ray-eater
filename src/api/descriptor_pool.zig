@@ -14,7 +14,7 @@ const api = @import("api.zig");
 const Allocator = std.mem.Allocator;
 
 const UsageInfo = common.DescriptorUsageInfo;
-const PoolUsageMap = std.EnumMap(UsageInfo.LifetimeScope);
+const PoolUsageMap = std.EnumMap(UsageInfo.LifetimeScope, AnyPool);
 const Context = @import("../context.zig");
 
 const log = std.log.scoped(.desc_pool);
