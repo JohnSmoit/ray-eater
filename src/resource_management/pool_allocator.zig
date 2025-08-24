@@ -196,6 +196,15 @@ pub fn free(self: *Self, item: *anyopaque) void {
     _ = item;
 }
 
+/// "items" MUST refer to a slice of type-matching handles...
+/// It's not a slice because you cant directly have slices
+/// whose underling type is unknown (opaque).
+pub fn freeRange(self: *Self, items: *anyopaque, count: usize) void {
+    _ = self;
+    _ = items;
+    _ = count;
+}
+
 pub fn freeAll(self: *Self) void {
     // Just overwrite the existing free space list with a new one, which will cover the entire pool
     // no leakage issues since the list is stored in-place

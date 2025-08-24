@@ -73,6 +73,7 @@ fn DeinitFnTemplate(comptime config: EntryConfig) type {
 pub const RegistryEntry = struct {
     type_id: TypeId,
     type_name: []const u8,
+    size_bytes: usize,
 
     initFn: AnyPtr,
     deinitFn: AnyPtr,
@@ -109,6 +110,7 @@ pub fn addEntry(
         .type_id = common.typeId(config.state),
         .type_name = @typeName(config.state),
         .management = config.management,
+        .size_bytes = @sizeOf(config.state),
     };
     
     // If the type registry fails to build, there is literally nothing to be done about it.

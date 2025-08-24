@@ -55,6 +55,11 @@ const glfwWindowShouldClose = c.glfwWindowShouldClose;
 const glfwCreateWindow = c.glfwCreateWindow;
 const glfwWindowHint = c.glfwWindowHint;
 
+pub fn instanceExtensions() [][*:0]const u8 {
+    var count: u32 = 0;
+    return @ptrCast(getRequiredInstanceExtensions(&count)[0..count]);
+}
+
 pub const Window = struct {
     handle: *GLFWwindow,
 
