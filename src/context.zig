@@ -27,6 +27,7 @@ const EnvBacking = struct {
     inst: Ref(Instance, .{}),
     dev: Ref(Device, .{}),
     surf: Ref(Surface, .{}),
+    desc: Ref(api.DescriptorPool, .{.field = "descriptor_pool"}),
 
     gi: Ref(GlobalInterface, .{ .field = "global_interface" }),
     ii: Ref(InstanceInterface, .{ .field = "inst_interface" }),
@@ -57,6 +58,7 @@ compute_queue: api.ComputeQueue,
 allocator: Allocator,
 
 resources: res.ResourceManager,
+descriptor_pool: api.DescriptorPool,
 registry: Registry,
 
 fn ResolveEnvType(comptime field: anytype) type {
@@ -184,6 +186,11 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
     try api.initRegistry(&new.registry);
 
     new.resources = try res.ResourceManager.init(config.management, &new.registry);
+    try api.DescriptorPool.initSelf(&new.descriptor_pool, new, .{
+        .scene = 1024,
+        .static = 1024,
+        .transient = 1024,
+    }); 
 
     return new;
 }
