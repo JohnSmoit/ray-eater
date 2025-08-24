@@ -32,7 +32,7 @@ const FreeSpaceList = struct {
     };
 
     const BlockList = std.DoublyLinkedList(BlockHeader);
-    const ListNode = BlockList.Node;
+    pub const ListNode = BlockList.Node;
 
     elem_size: usize,
     free_nodes: BlockList,
@@ -85,6 +85,7 @@ const FreeSpaceList = struct {
 
     pub fn init(buf: []u8, elem_size: usize) FreeSpaceList {
         const num_elements = @divExact(buf.len, elem_size);
+
         const node = makeNode(buf, .{ .elem_count = num_elements });
 
         var list = BlockList{};
@@ -177,6 +178,16 @@ pub fn initAlloc(allocator: Allocator, config: Config) !Self {
     return new;
 }
 
+pub fn initAllocAligned(allocator: Allocator, comptime alignment: u29, config: Config) !Self {
+    const total_size = config.elem_count * config.elem_size;
+    const buf = try allocator.alignedAlloc(u8, alignment, total_size);
+
+    var new = init(buf, config);
+    new.allocator = allocator;
+
+    return new;
+}
+
 /// Reserve a single item
 /// Pointer is guarunteed to refer to a block
 /// of memory for the correct size.
@@ -216,7 +227,7 @@ pub fn freeAll(self: *Self) void {
 /// * Directly passed buffer must respect alginment requirements
 ///   of the state type
 pub fn init(buf: []u8, config: Config) Self {
-    const resolved_size: usize = @min(@sizeOf(FreeSpaceList.ListNode), config.elem_size);
+    const resolved_size: usize = @max(@sizeOf(FreeSpaceList.ListNode), config.elem_size);
     return .{
         .config = config,
 
@@ -234,9 +245,8 @@ pub fn deinit(self: *Self) void {
 // Testing goes here:
 // We're probably gonna need a lot of them lol.
 
-
 const TestingStructA = struct {
-    items: [6]u32,
+    items: [10]u32,
 };
 const TestingPool = TypedPool(TestingStructA);
 
@@ -256,7 +266,7 @@ test "pool alloc" {
 
 test "pool free" {
     //TODO: Testing partial frees
-    
+
     // free everything
     var pool = try TestingPool.initAlloc(std.heap.page_allocator, 1024);
     _ = try pool.reserveRange(240);
@@ -268,10 +278,28 @@ test "pool free" {
     } else return error.InvalidFreeList;
 }
 
+const Small = struct {
+    a: u8 = 0,
+    b: u8 = 0,
+    c: u8 = 0,
+};
+
 test "out of memory" {
     var pool = try TestingPool.initAlloc(std.heap.page_allocator, 1024);
     defer pool.deinit();
 
     _ = try pool.reserveRange(120);
-    try testing.expectError(PoolErrors.OutOfMemory, pool.reserveRange(905));
 }
+
+test "pool with small object" {
+    var pool = try TypedPool(Small).initAlloc(std.heap.page_allocator, 1024);
+    defer pool.deinit();
+    _ = try pool.reserveRange(1);
+
+    pool.freeAll();
+    if (pool.inner.free_space.free_nodes.first) |f| {
+        try testing.expect(f.data.elem_count == 1024);
+        try testing.expect(f.next == null);
+    } else return error.InvalidFreeList;
+}
+

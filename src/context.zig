@@ -27,7 +27,10 @@ const EnvBacking = struct {
     inst: Ref(Instance, .{}),
     dev: Ref(Device, .{}),
     surf: Ref(Surface, .{}),
-    desc: Ref(api.DescriptorPool, .{.field = "descriptor_pool"}),
+    desc: Ref(api.DescriptorPool, .{
+        .field = "descriptor_pool",
+        .mutable = true,
+    }),
 
     gi: Ref(GlobalInterface, .{ .field = "global_interface" }),
     ii: Ref(InstanceInterface, .{ .field = "inst_interface" }),
@@ -74,6 +77,7 @@ fn ResolveEnvType(comptime field: anytype) type {
 /// becomes more of a concern
 /// * .inst -> VkInstance (Retrieves application's VkInstance handle, generally not useful for application logic)
 /// * .dev -> VkDevice (Retrieves application's VkDevice handle, generally not useful for application logic)
+/// * .desc -> Descriptor Pool (Application-wide descriptor pools (not much reason to access this on the user side)
 ///
 /// ### Interfaces
 /// * .gi -> global interface (does not require an instanced handle of any kind, generally setup such as extension querying
@@ -190,12 +194,14 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
         .scene = 1024,
         .static = 1024,
         .transient = 1024,
-    }); 
+    });
 
     return new;
 }
 
 pub fn deinit(self: *Self) void {
+    self.descriptor_pool.deinit();
+
     self.dev.deinit();
     self.surf.deinit();
     self.inst.deinit();
@@ -247,9 +253,9 @@ pub fn presentFrame(
 //         }
 //     }
 //     try glfw.init();
-// 
+//
 //     const extensions = glfw.instanceExtensions();
-// 
+//
 //     var ctx = try Self.init(allocator.allocator(), .{
 //         .inst_extensions = extensions,
 //         .loader = glfw.glfwGetInstanceProcAddress,

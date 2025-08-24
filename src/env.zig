@@ -5,13 +5,14 @@
 const std = @import("std");
 const RefConfig = struct {
     field: ?[]const u8 = null,
+    mutable: bool = false,
 };
 /// returns a const non-owning pointer to the object
 /// (might enforce a bit more memory safety here later)
 pub fn Ref(comptime T: type, comptime config: RefConfig) type {
     return struct {
         pub const field = config.field;
-        pub const InnerType = *const T;
+        pub const InnerType = if (!config.mutable) *const T else *T;
         const Self = @This();
 
         inner: InnerType,

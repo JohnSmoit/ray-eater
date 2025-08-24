@@ -31,14 +31,13 @@ const AnyPool = struct {
     pub const VTable = struct {
         rawReserve: *const fn (
             *anyopaque,
-            usize,
             /// This mostly exists for the purpose of potentially having more sophisticated pool managment
             /// within a single usage pool
             []const UsageInfo,
             []const vk.DescriptorSetLayout,
             /// Descriptor sets are written into this user provided slice rather than allocation
             []vk.DescriptorSet,
-        ) PoolErrors![]vk.DescriptorSet,
+        ) PoolErrors!void,
         rawFree: *const fn (
             *anyopaque,
             []const UsageInfo,
@@ -55,11 +54,11 @@ const AnyPool = struct {
 
     pub fn rawReserve(
         self: AnyPool,
-        count: usize,
         usages: []const UsageInfo,
         layouts: []const vk.DescriptorSetLayout,
-    ) PoolErrors![]vk.DescriptorSet {
-        return self.vtable.rawReserve(self.ctx, count, usages, layouts);
+        sets: []vk.DescriptorSet,
+    ) PoolErrors!void {
+        try self.vtable.rawReserve(self.ctx, usages, layouts, sets);
     }
 
     pub fn rawFree(
@@ -151,10 +150,10 @@ const PoolArena = struct {
             .p_set_layouts = layouts.ptr,
         };
 
-        try self.di.allocateDescriptorSets(&alloc_info, sets.ptr) catch |e| {
-            switch (e) {
-                .OutOfHostMemory, .OutOfDeviceMemory, .OutOfPoolMemory => PoolErrors.OutOfMemory,
-                .FragmentedPool => blk: {
+        self.di.allocateDescriptorSets(&alloc_info, sets.ptr) catch |e| {
+            return switch (e) {
+                error.OutOfHostMemory, error.OutOfDeviceMemory, error.OutOfPoolMemory => PoolErrors.OutOfMemory,
+                error.FragmentedPool => blk: {
                     // TODO: possibly trigger a defragging routine here
                     log.debug(
                         "pool is too fragmented to allocate.",
@@ -163,7 +162,7 @@ const PoolArena = struct {
                     break :blk PoolErrors.OutOfMemory;
                 },
                 else => PoolErrors.Internal,
-            }
+            };
         };
 
         _ = usages;
@@ -198,6 +197,10 @@ const PoolArena = struct {
                 .reset = reset,
             },
         };
+    }
+
+    pub fn deinit(self: *PoolArena) void {
+        self.di.destroyDescriptorPool(self.h_desc_pool, null);
     }
 };
 
@@ -241,7 +244,7 @@ pub fn initSelf(self: *Self, ctx: *const Context, sizes: PoolSizes) !void {
     self.static_pool = try PoolArena.init(di, sizes.static);
     errdefer self.static_pool.deinit();
 
-    self.pools_by_usage = try PoolUsageMap.init(.{
+    self.pools_by_usage = PoolUsageMap.init(.{
         .Transient = self.transient_pool.interface(),
         .Scene = self.scene_pool.interface(),
         .Static = self.static_pool.interface(),
@@ -257,18 +260,21 @@ pub fn reserve(
     usage: UsageInfo,
     layout: vk.DescriptorSetLayout,
 ) !vk.DescriptorSet {
-    const set = try self.reserveRange(1, &.{usage}, &.{layout});
+    const pool = self.poolByUsage(usage);
+    var set = [1]vk.DescriptorSet{undefined};
+    try pool.rawReserve(&.{usage}, &.{layout}, set[0..]);
+
     return set[0];
 }
 
 pub fn reserveRange(
     self: *Self,
-    count: usize,
     usage: UsageInfo,
     layouts: []const vk.DescriptorSetLayout,
-) ![]vk.DescriptorSetLayout {
+    sets: []vk.DescriptorSet,
+) !void {
     const pool = self.poolByUsage(usage);
-    return pool.rawReserve(count, &.{usage}, layouts);
+    try pool.rawReserve( &.{usage}, layouts, sets);
 }
 
 pub fn free(
@@ -289,5 +295,11 @@ pub fn freeRange(
         const pool = self.poolByUsage(u);
         pool.rawFree(&.{u}, &.{s});
     }
+}
+
+pub fn deinit(self: *Self) void {
+    self.scene_pool.deinit();
+    self.static_pool.deinit();
+    self.transient_pool.deinit();
 }
 

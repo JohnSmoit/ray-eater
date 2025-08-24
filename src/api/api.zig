@@ -52,8 +52,8 @@ pub const ComptimeStorageBuffer = @import("storage_buffer.zig").ComptimeStorageB
 pub const BufInterface = buf.AnyBuffer;
 
 pub const Descriptor = @import("descriptor.zig");
-pub const ResolvedDescriptorBinding = Descriptor.ResolvedBinding;
 pub const DescriptorPool = @import("descriptor_pool.zig");
+pub const DescriptorLayout = Descriptor.DescriptorLayout;
 pub const DescriptorType = common.DescriptorType;
 pub const DescriptorUsageInfo = common.DescriptorUsageInfo;
 

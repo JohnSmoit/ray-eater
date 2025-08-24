@@ -38,23 +38,6 @@ pub const Config = struct {
 
 pub const DescriptorType = common.DescriptorType;
 
-pub const ResolvedBinding = struct {
-    stages: vk.ShaderStageFlags,
-    data: union(DescriptorType) {
-        Uniform: AnyBuffer,
-        Sampler: struct {
-            sampler: vk.Sampler,
-            view: vk.ImageView,
-        },
-        StorageBuffer: AnyBuffer,
-        Image: struct {
-            img: *const Image,
-            // caller is responsible for this for now
-            view: vk.ImageView,
-        },
-    },
-};
-
 // flattened since buffers are the same regardless
 // of whether they be uniform or storage
 const BindingWriteInfo = union(enum) {
@@ -73,10 +56,15 @@ pr_dev: *const vk.DeviceProxy,
 layout: DescriptorLayout,
 
 pub fn init(ctx: *const Context, config: Config) !Self {
+    if (config.layout.layout == null) {
+        log.err("Invalid descriptor layout (likely forgot to call resolve())", .{});
+        return error.InvalidLayout;
+    }
+
     const dev: *const DeviceHandler = ctx.env(.dev);
     var desc_pools = ctx.env(.desc);
 
-    const desc_set = try desc_pools.reserve(config.usage, config.layout);
+    const desc_set = try desc_pools.reserve(config.usage, config.layout.layout.?);
 
     var descriptor = Self{
         .layout = config.layout,
@@ -112,11 +100,14 @@ pub fn use(
     );
 }
 
-pub fn deinit(self: *Self, ctx: *const Context) void {
-    var desc_pool = ctx.env(.desc);
+pub fn deinit(self: *Self) void {//, ctx: *const Context) void {
+    //FIXME: Can't pass context until lifecyle routines are integrated
+    _ = self;
+
+    //var desc_pool = ctx.env(.desc);
     // this may do nothing depending on usage
-    desc_pool.free(self.usage, self.h_desc_set);
-    self.layout.deinit();
+    //desc_pool.free(self.usage, self.h_desc_set);
+    //self.layout.deinit();
 }
 
 pub fn bindUniformsNamed(self: *Self, name: []const u8, ubo: AnyBuffer) void {
@@ -124,12 +115,12 @@ pub fn bindUniformsNamed(self: *Self, name: []const u8, ubo: AnyBuffer) void {
     self.bindUniforms(loc, ubo);
 }
 
-pub fn bindSamplerNamed(self: *Self, name: []const u8, sampler: vk.Sampler, view: vk.ImageView) void {
+pub fn bindSamplerNamed(self: *Self, name: []const u8, sampler: vk.Sampler, view: Image.View) void {
     const loc = self.layout.named_bindings.get(name) orelse return;
     self.bindSampler(loc, sampler, view);
 }
 
-pub fn bindImageNamed(self: *Self, name: []const u8, img: *const Image, view: vk.ImageView) void {
+pub fn bindImageNamed(self: *Self, name: []const u8, img: *const Image, view: Image.View) void {
     const loc = self.layout.named_bindings.get(name) orelse return;
     self.bindImage(loc, img, view);
 }
@@ -143,14 +134,15 @@ pub fn bindUniforms(self: *Self, index: usize, ubo: AnyBuffer) void {
     self.bindBase(index, .{.Uniform = ubo});
 }
 
-pub fn bindSampler(self: *Self, index: usize, sampler: vk.Sampler, view: vk.ImageView) void {
+pub fn bindSampler(self: *Self, index: usize, sampler: vk.Sampler, view: Image.View) void {
     self.bindBase(index, .{.Sampler = .{
         .sampler = sampler,
         .view = view,
     }});
 }
 
-pub fn bindImage(self: *Self, index: usize, img: *const Image, view: vk.ImageView) void {
+//TODO: Get rid of *img if i don't need it
+pub fn bindImage(self: *Self, index: usize, img: *const Image, view: Image.View) void {
     self.bindBase(index, .{.Image = .{
         .img = img,
         .view = view,
@@ -182,7 +174,7 @@ fn bindBase(self: *Self, index: usize, b: DescriptorBinding) void {
         .Sampler => |sampler| {
             binding = .{ .Image = vk.DescriptorImageInfo{
                 .image_layout = .read_only_optimal,
-                .image_view = sampler.view,
+                .image_view = sampler.view.h_view,
                 .sampler = sampler.sampler,
             } };
 
@@ -192,7 +184,7 @@ fn bindBase(self: *Self, index: usize, b: DescriptorBinding) void {
         .Image => |img| {
             binding = .{ .Image = vk.DescriptorImageInfo{
                 .image_layout = .general,
-                .image_view = img.view,
+                .image_view = img.view.h_view,
                 .sampler = .null_handle,
             } };
 
@@ -200,7 +192,7 @@ fn bindBase(self: *Self, index: usize, b: DescriptorBinding) void {
             write.descriptor_type = .storage_image;
         },
         else => {
-            const buf: AnyBuffer, const dt: vk.DescriptorType = switch (binding.data) {
+            const buf: AnyBuffer, const dt: vk.DescriptorType = switch (b) {
                 .Uniform => |buf| .{ buf, .uniform_buffer },
                 .StorageBuffer => |buf| .{ buf, .storage_buffer },
                 else => unreachable,
@@ -234,6 +226,11 @@ pub fn update(self: *Self) void {
     );
 }
 
+pub fn vkLayout(self: *const Self) vk.DescriptorSetLayout {
+    // this has already been checked during initialization.
+    return self.layout.layout orelse unreachable;
+}
+
 /// Formerly "update"
 pub fn setValue(self: *Self, index: usize, data: anytype) !void {
     const binding = self.resolved_bindings[index];
@@ -249,14 +246,14 @@ pub fn setValue(self: *Self, index: usize, data: anytype) !void {
 
 const DescriptorBinding = union(DescriptorType) {
     Uniform: AnyBuffer,
+    Sampler: struct {
+        sampler: vk.Sampler,
+        view: Image.View,
+    },
     StorageBuffer: AnyBuffer,
     Image: struct {
         img: *const Image,
-        view: vk.ImageView,
-    },
-    Sampler: struct {
-        sampler: vk.Sampler,
-        view: vk.ImageView,
+        view: Image.View,
     },
 };
 
@@ -287,26 +284,34 @@ pub const DescriptorLayout = struct {
     allocator: Allocator,
 
     specifiers: std.ArrayListUnmanaged(Specifier),
-    named_bindings: std.StringArrayHashMap(usize),
+    named_bindings: std.StringArrayHashMapUnmanaged(usize),
     
     writes: []vk.WriteDescriptorSet,
-    layout: ?vk.DescriptorLayout = null,
+    layout: ?vk.DescriptorSetLayout = null,
     size: usize,
 
     /// Screw you, just figure out how many descriptors you need before
     /// allocating shit all over the place.
     pub fn init(ctx: *const Context, allocator: Allocator, size: usize) !DescriptorLayout {
-        var bindings_map = std.StringArrayHashMap(usize).init(allocator);
+        var bindings_map = try std.StringArrayHashMapUnmanaged(usize).init(allocator, &.{}, &.{});
+        errdefer bindings_map.deinit(allocator);
 
-        try bindings_map.ensureTotalCapacity(size);
+        const writes_buf = try allocator.alloc(vk.WriteDescriptorSet, size);
+        errdefer allocator.free(writes_buf);
+
+        var specifiers = try std.ArrayListUnmanaged(Specifier).initCapacity(allocator, size);
+        errdefer specifiers.deinit(allocator);
+
+        try bindings_map.ensureTotalCapacity(allocator, size);
         return DescriptorLayout{
-            .di = ctx.env(.dev),
+            .di = ctx.env(.di),
             .allocator = allocator,
 
-            .specifiers = try std.ArrayListUnmanaged(Specifier).initCapacity(allocator, size),
+            .specifiers = specifiers,
+            .named_bindings = bindings_map,
 
-            .writes = try allocator.alloc(vk.WriteDescriptorSet, size),
-            .size = usize,
+            .writes = writes_buf,
+            .size = size,
         };
     }
 
@@ -329,9 +334,9 @@ pub const DescriptorLayout = struct {
         const layout_infos = try self.allocator.alloc(vk.DescriptorSetLayoutBinding, self.size);  
         defer self.allocator.free(layout_infos);
 
-        for (self.specifiers, layout_infos) |spec, layout_info| {
+        for (self.specifiers.items, layout_infos) |spec, *layout_info| {
             layout_info.descriptor_count = 1;
-            layout_info.descriptor_type = layout_info.@"2".toVkDescriptor();
+            layout_info.descriptor_type = spec.@"2".toVkDescriptor();
 
             layout_info.binding = spec.@"0";
             layout_info.stage_flags = spec.@"3";

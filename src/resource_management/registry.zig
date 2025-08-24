@@ -167,10 +167,15 @@ pub const Query = struct {
                 !self.matches(&self.entries[self.index])) : (self.index += 1)
             {}
 
-            return if (self.index < self.entries.len)
-                &self.entries[self.index]
-            else
-                null;
+            if (self.index < self.entries.len){
+                const tmp =  &self.entries[self.index];
+                self.index += 1;
+
+                return tmp;
+            }
+            else {
+                return null;
+            }
         }
     };
 

@@ -17,7 +17,7 @@ const Self = @This();
 
 pub const Config = struct {
     shader: *const ShaderModule,
-    desc_bindings: []const ResolvedBinding,
+    desc: api.Descriptor,
 };
 
 pr_dev: *const DeviceInterface,
@@ -25,24 +25,19 @@ h_pipeline: vk.Pipeline,
 h_pipeline_layout: vk.PipelineLayout,
 desc: Descriptor,
 
-pub fn init(ctx: *const Context, allocator: Allocator, cfg: Config) !Self {
+pub fn init(ctx: *const Context, cfg: Config) !Self {
     const pr_dev: *const DeviceInterface = ctx.env(.di);
-    var desc = try Descriptor.init(ctx, allocator, .{
-        .bindings = cfg.desc_bindings,
-    });
-    errdefer desc.deinit();
-
     // create the actual pipeline
     const layout = try pr_dev.createPipelineLayout(&.{
         .flags = .{},
         .set_layout_count = 1,
-        .p_set_layouts = &.{desc.h_desc_layout},
+        .p_set_layouts = &.{cfg.desc.vkLayout()},
     }, null);
     errdefer pr_dev.destroyPipelineLayout(layout, null);
 
     var new = Self{
         .pr_dev = pr_dev,
-        .desc = desc,
+        .desc = cfg.desc,
         .h_pipeline_layout = layout,
         .h_pipeline = .null_handle,
     };
@@ -65,12 +60,12 @@ pub fn init(ctx: *const Context, allocator: Allocator, cfg: Config) !Self {
 }
 
 pub fn updateData(self: *Self, binding: u32, data: anytype) !void {
-    self.desc.update(binding, data);
+    self.desc.setValue(binding, data);
 }
 
 pub fn bind(self: *const Self, cmd_buf: *const CommandBuffer) void {
     self.pr_dev.cmdBindPipeline(cmd_buf.h_cmd_buffer, .compute, self.h_pipeline);
-    self.desc.bind(cmd_buf, self.h_pipeline_layout, .{ .bind_point = .compute });
+    self.desc.use(cmd_buf, self.h_pipeline_layout, .{ .bind_point = .compute });
 }
 
 pub fn dispatch(
