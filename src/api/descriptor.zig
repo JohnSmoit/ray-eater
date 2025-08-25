@@ -100,14 +100,13 @@ pub fn use(
     );
 }
 
-pub fn deinit(self: *Self) void {//, ctx: *const Context) void {
-    //FIXME: Can't pass context until lifecyle routines are integrated
-    _ = self;
+//FIXME: Can't pass context until lifecyle routines are integrated
+pub fn deinit(self: *Self) void { //, ctx: *const Context) void {
 
     //var desc_pool = ctx.env(.desc);
     // this may do nothing depending on usage
     //desc_pool.free(self.usage, self.h_desc_set);
-    //self.layout.deinit();
+    self.layout.deinit();
 }
 
 pub fn bindUniformsNamed(self: *Self, name: []const u8, ubo: AnyBuffer) void {
@@ -131,29 +130,30 @@ pub fn bindBufferNamed(self: *Self, name: []const u8, buf: AnyBuffer) void {
 }
 
 pub fn bindUniforms(self: *Self, index: usize, ubo: AnyBuffer) void {
-    self.bindBase(index, .{.Uniform = ubo});
+    self.bindBase(index, .{ .Uniform = ubo });
 }
 
 pub fn bindSampler(self: *Self, index: usize, sampler: vk.Sampler, view: Image.View) void {
-    self.bindBase(index, .{.Sampler = .{
+    self.bindBase(index, .{ .Sampler = .{
         .sampler = sampler,
         .view = view,
-    }});
+    } });
 }
 
 //TODO: Get rid of *img if i don't need it
 pub fn bindImage(self: *Self, index: usize, img: *const Image, view: Image.View) void {
-    self.bindBase(index, .{.Image = .{
+    self.bindBase(index, .{ .Image = .{
         .img = img,
         .view = view,
-    }});
+    } });
 }
 
 pub fn bindBuffer(self: *Self, index: usize, buf: AnyBuffer) void {
-    self.bindBase(index, .{.StorageBuffer = buf});
+    self.bindBase(index, .{ .StorageBuffer = buf });
 }
 
 fn bindBase(self: *Self, index: usize, b: DescriptorBinding) void {
+    debug.assert(index < self.layout.size);
     const write = &self.layout.writes[index];
     write.* = vk.WriteDescriptorSet{
         .descriptor_type = undefined,
@@ -168,27 +168,27 @@ fn bindBase(self: *Self, index: usize, b: DescriptorBinding) void {
         .p_texel_buffer_view = undefined,
     };
 
-    var binding: BindingWriteInfo = undefined;
+    const binding = &self.layout.write_infos[index];
 
     switch (b) {
         .Sampler => |sampler| {
-            binding = .{ .Image = vk.DescriptorImageInfo{
+            binding.* = .{ .Image = vk.DescriptorImageInfo{
                 .image_layout = .read_only_optimal,
                 .image_view = sampler.view.h_view,
                 .sampler = sampler.sampler,
             } };
 
+            write.p_image_info = @as([*]vk.DescriptorImageInfo, @ptrCast(&binding.Image));
             write.descriptor_type = .combined_image_sampler;
-            write.p_image_info = &.{binding.Image};
         },
         .Image => |img| {
-            binding = .{ .Image = vk.DescriptorImageInfo{
+            binding.* = .{ .Image = vk.DescriptorImageInfo{
                 .image_layout = .general,
                 .image_view = img.view.h_view,
                 .sampler = .null_handle,
             } };
 
-            write.p_image_info = &.{binding.Image};
+            write.p_image_info = @as([*]vk.DescriptorImageInfo, @ptrCast(&binding.Image));
             write.descriptor_type = .storage_image;
         },
         else => {
@@ -198,19 +198,17 @@ fn bindBase(self: *Self, index: usize, b: DescriptorBinding) void {
                 else => unreachable,
             };
 
-            binding = .{ .Buffer = vk.DescriptorBufferInfo{
+            binding.* = .{ .Buffer = vk.DescriptorBufferInfo{
                 .buffer = buf.handle,
                 .offset = 0,
                 .range = buf.size,
             } };
 
+            write.p_buffer_info = @as([*]vk.DescriptorBufferInfo, @ptrCast(&binding.Buffer));
             write.descriptor_type = dt;
-
-            write.p_buffer_info = &.{binding.Buffer};
         },
     }
 }
-
 
 /// Write descriptor values to the descriptor set.
 /// -- This should happen anytime the descriptor's makeup changes
@@ -261,12 +259,11 @@ const debug = std.debug;
 
 // Descriptor layouts done better
 pub const DescriptorLayout = struct {
-    const Specifier = struct { 
-        u32, 
-        []const u8, 
-        DescriptorType, 
-        vk.ShaderStageFlags, 
-
+    const Specifier = struct {
+        u32,
+        []const u8,
+        DescriptorType,
+        vk.ShaderStageFlags,
     };
 
     fn id(spec: Specifier) SpecifierID {
@@ -285,8 +282,9 @@ pub const DescriptorLayout = struct {
 
     specifiers: std.ArrayListUnmanaged(Specifier),
     named_bindings: std.StringArrayHashMapUnmanaged(usize),
-    
+
     writes: []vk.WriteDescriptorSet,
+    write_infos: []BindingWriteInfo,
     layout: ?vk.DescriptorSetLayout = null,
     size: usize,
 
@@ -298,6 +296,9 @@ pub const DescriptorLayout = struct {
 
         const writes_buf = try allocator.alloc(vk.WriteDescriptorSet, size);
         errdefer allocator.free(writes_buf);
+
+        const write_infos_buf = try allocator.alloc(BindingWriteInfo, size);
+        errdefer allocator.free(write_infos_buf);
 
         var specifiers = try std.ArrayListUnmanaged(Specifier).initCapacity(allocator, size);
         errdefer specifiers.deinit(allocator);
@@ -311,6 +312,7 @@ pub const DescriptorLayout = struct {
             .named_bindings = bindings_map,
 
             .writes = writes_buf,
+            .write_infos = write_infos_buf,
             .size = size,
         };
     }
@@ -322,7 +324,12 @@ pub const DescriptorLayout = struct {
     }
 
     pub fn addDescriptors(self: *DescriptorLayout, specs: []const Specifier) void {
-        debug.assert(self.specifiers.items.len + specs.len < self.size);
+        std.debug.print("added spec count: {d}\n size: {d}\n expected range: {d}\n", .{
+            specs.len,
+            self.size,
+            self.specifiers.items.len + specs.len,
+        });
+        debug.assert(self.specifiers.items.len + specs.len <= self.size);
 
         for (specs) |spec| {
             self.specifiers.insertAssumeCapacity(@intCast(spec.@"0"), spec);
@@ -331,27 +338,30 @@ pub const DescriptorLayout = struct {
     }
 
     pub fn resolve(self: *DescriptorLayout) !void {
-        const layout_infos = try self.allocator.alloc(vk.DescriptorSetLayoutBinding, self.size);  
+        const layout_infos = try self.allocator.alloc(vk.DescriptorSetLayoutBinding, self.size);
         defer self.allocator.free(layout_infos);
 
         for (self.specifiers.items, layout_infos) |spec, *layout_info| {
+            std.debug.print("Adding: {s}\n", .{@tagName(spec.@"2".toVkDescriptor())});
             layout_info.descriptor_count = 1;
-            layout_info.descriptor_type = spec.@"2".toVkDescriptor();
-
+            
             layout_info.binding = spec.@"0";
+            layout_info.descriptor_type = spec.@"2".toVkDescriptor();
             layout_info.stage_flags = spec.@"3";
+            layout_info.p_immutable_samplers = null;
         }
 
         self.layout = try self.di.createDescriptorSetLayout(&.{
             .binding_count = @intCast(layout_infos.len),
             .p_bindings = layout_infos.ptr,
-        }, null); 
+        }, null);
     }
 
-    pub fn deinit(self: *const DescriptorLayout) void {
+    pub fn deinit(self: *DescriptorLayout) void {
         self.allocator.free(self.writes);
+        self.allocator.free(self.write_infos);
         self.specifiers.deinit(self.allocator);
-        
+
         if (self.layout) |l| {
             self.di.destroyDescriptorSetLayout(l, null);
         }
@@ -380,11 +390,11 @@ pub const DescriptorLayout = struct {
 //
 //    //NOTE: You give ownership to the descriptor when you
 //    var desc = try Self.init(ctx, allocator, layout);
-//    
+//
 //    // After consideration, I have elected to prefix this family of functions
 //    // with "bind", as they are what associates a concrete resource
 //    // with the descriptor "slot" persay. In the case of image-type descriptors,
-//    // these functions are literally all that you need to associate a concrete 
+//    // these functions are literally all that you need to associate a concrete
 //    // image with a descriptor slot, making them almost analogous with "glBindTexture" and such.
 //    desc.bindUniformsNamed("Uniforms", some_ubo);
 //    desc.bindSamplerNamed("MainTex", some_texture);

@@ -199,11 +199,7 @@ const SampleState = struct {
             "FragUniforms",
             self.gpu_state.uniforms.buffer(),
         );
-        self.graphics.descriptor.bindSamplerNamed(
-            "MainTex",
-            self.gpu_state.render_sampler,
-            self.gpu_state.render_view
-        );
+        self.graphics.descriptor.bindSamplerNamed("MainTex", self.gpu_state.render_sampler, self.gpu_state.render_view);
 
         self.graphics.descriptor.update();
 
@@ -270,7 +266,7 @@ const SampleState = struct {
 
         var compute_descriptor = try Descriptor.init(self.ctx, .{
             .layout = compute_desc_layout,
-            .usage = .{.lifetime_bits = .Static},
+            .usage = .{ .lifetime_bits = .Static },
         });
 
         compute_descriptor.bindUniformsNamed("Uniforms", self.gpu_state.compute_uniforms.buffer());
