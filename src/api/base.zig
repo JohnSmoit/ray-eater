@@ -354,8 +354,15 @@ pub const DeviceHandler = struct {
         var found = false;
         var chosen_mem: u32 = 0;
 
+        for (0..dev_mem_props.memory_heap_count) |i| {
+            const heap = dev_mem_props.memory_heaps[i];
+            log.debug("{d}. memory heap: {s} (size: {d})", .{i, heap.flags, heap.size});
+        }
+
         for (0..dev_mem_props.memory_type_count) |i| {
             const mem_flags = dev_mem_props.memory_types[i].property_flags;
+            const heap_index = dev_mem_props.memory_types[i].heap_index;
+            log.debug("Memory Type {d} (heap {d}): {s}", .{i, heap_index, mem_flags});
             if (mem_reqs.memory_type_bits & (@as(u32, 1) << @intCast(i)) != 0 and mem_flags.contains(requested_flags)) {
                 found = true;
 

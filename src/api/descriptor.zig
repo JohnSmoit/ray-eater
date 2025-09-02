@@ -324,11 +324,6 @@ pub const DescriptorLayout = struct {
     }
 
     pub fn addDescriptors(self: *DescriptorLayout, specs: []const Specifier) void {
-        std.debug.print("added spec count: {d}\n size: {d}\n expected range: {d}\n", .{
-            specs.len,
-            self.size,
-            self.specifiers.items.len + specs.len,
-        });
         debug.assert(self.specifiers.items.len + specs.len <= self.size);
 
         for (specs) |spec| {
@@ -342,7 +337,6 @@ pub const DescriptorLayout = struct {
         defer self.allocator.free(layout_infos);
 
         for (self.specifiers.items, layout_infos) |spec, *layout_info| {
-            std.debug.print("Adding: {s}\n", .{@tagName(spec.@"2".toVkDescriptor())});
             layout_info.descriptor_count = 1;
             
             layout_info.binding = spec.@"0";

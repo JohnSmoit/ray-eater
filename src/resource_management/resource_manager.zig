@@ -34,7 +34,6 @@ pub fn init(config: Config, registry: *Registry) !Self {
     var table = MemoryPoolsTable.init(config.allocator);
 
     while (entries.next()) |entry| {
-        std.debug.print("Creating pool for type {s}\n", .{entry.type_name});
         const pool_config = PoolAllocator.Config{
             .elem_size = entry.size_bytes,
             .elem_count = config.pool_sizes,

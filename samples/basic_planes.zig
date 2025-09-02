@@ -406,7 +406,7 @@ pub fn main() !void {
     defer window.destroy();
 
     glfw.vulkanSupported() catch |err| {
-        std.debug.print("Could not load Vulkan\n", .{});
+        std.log.err("Could not load Vulkan", .{});
         return err;
     };
 
@@ -425,5 +425,5 @@ pub fn main() !void {
         try mainLoop();
     }
 
-    std.debug.print("You win!\n", .{});
+    std.log.info("You win!\n", .{});
 }
