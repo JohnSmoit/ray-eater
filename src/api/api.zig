@@ -11,9 +11,9 @@ const vert_buf = @import("vertex_buffer.zig");
 const common = @import("common_types.zig");
 
 // direct vulkan-zig imports
-pub const GlobalInterface = vk.BaseWrapper;
-pub const InstanceInterface = vk.InstanceProxy;
-pub const DeviceInterface = vk.DeviceProxy;
+pub const GlobalInterface = *const vk.BaseWrapper;
+pub const InstanceInterface = *const vk.InstanceProxy;
+pub const DeviceInterface = *const vk.DeviceProxy;
 pub const DynamicState = vk.DynamicState;
 
 /// All registered extensions for devices and instances

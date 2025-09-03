@@ -5,6 +5,11 @@ const h = @import("handle.zig");
 pub const Handle = h.Handle;
 pub const OpaqueHandle = h.OpaqueHandle;
 
+// these resemble std's pools, but they have intrinsic support for handle
+// indexing
+pub const OpaqueMemoryPool = @import("pool_allocator.zig");
+pub const MemoryPool = OpaqueMemoryPool.TypedPool;
+
 pub const config = @import("config.zig");
 pub const util = @import("util.zig");
 

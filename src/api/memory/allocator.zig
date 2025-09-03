@@ -6,6 +6,11 @@
 //! to the standard memory allocation interface (if I can I will support creating
 //! std.mem.Allocators).
 
+/// GAYAYUIQHOIUDSAHIUHDLIHGLUSDhlhfLIHUDS
+/// Guhh, now we're doing memeory management for the memory management fuuuuuuuuck.
+/// Guhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
+///
+
 const std = @import("std");
 const vk = @import("vulkan");
 const common = @import("common");
@@ -20,11 +25,22 @@ const Context = @import("../context.zig");
 ///
 /// Probably should handleify this, to make allocations more resistant
 /// to changes in location and such
-pub const Allocation = struct {
+const AllocationData = struct {
     src_heap: vk.DeviceMemory,
     offset: u32,
     size: u32,
 };
+
+pub const Error = error{
+    HostOutOfMemory,
+    DeviceOutOfMemory,
+    NoMatchingHeap,
+    // InvalidConfiguration, This'll be handled with asserts in debug
+};
+
+
+pub const Allocation = common.Handle(AllocationData);
+pub const Heap = common.Handle(HeapData);
 
 const AllocationScope = enum(u2) {
     /// General Purpose, Picks a free-list styled, static heap
@@ -64,6 +80,7 @@ const AllocationPropertyFlags = packed struct {
     /// will be used for this allocation
     lifetime_hint: AllocationScope = .General,
 };
+
 const StructureHints = packed struct {
     /// Size in bytes of the structure
     /// use for untyped but otherwise fixed-sized resources. Especially if you have multiple of the same
@@ -79,6 +96,12 @@ const StructureHints = packed struct {
     type_id: ?common.TypeId = null,
 };
 
+const DedicatedAllocationPolicyBits = enum(u2) {
+    Force,
+    Disallow,
+    Unspecified,
+};
+
 pub const AllocationConfig = packed struct {
     pub const GeneralFlags = packed struct {
         ///General stuff
@@ -88,7 +111,7 @@ pub const AllocationConfig = packed struct {
 
         /// Force the allocator to perform a dedicated
         /// VkAllocateMemory specifically for this allocation (renders most configuration moot)
-        force_dedicated: bool = false,
+        dedicated_alloc_policy: DedicatedAllocationPolicyBits = .Unspecified,
     };
 
     pub const Resolved = packed struct {
@@ -133,100 +156,6 @@ pub const AllocationConfig = packed struct {
     pub fn flatten(self: *const AllocationConfig) Resolved {}
 };
 
-/// Just a thin wrapper over a VkDeviceMemory with some extra crap
-/// Think of this as an individual device memory, the only real difference is that
-/// it supports suballocations on a less granular page size.
-const GPUBlock = struct {
-    parent_heap: *const Heap,
-    mem: vk.DeviceMemory,
-
-    /// offset into physical GPU memory pool,
-    /// Probably can save some bits since pages will be relatively large
-    break_limit: u16,
-    page_count: u16,
-
-    /// Performs exactly one GPU allocation of the specified # of pages
-    /// (determined by the parent heap)
-    ///
-    /// This function should not be allowed to error, since budgets and memory
-    /// limits should be figured out ahead of time. Essentially, a new block
-    /// should only ever be created if there is actually space for one.
-    pub fn init(heap: *Heap, page_count: u16) GPUBlock {
-    }
-};
-
-/// Individual memory heap,
-/// This maps cleanly onto vulkan's idea of a heap. and is essentially a wrapper
-/// with some bookkeeping info along with supported memory types.
-/// Think of this as an otherwise unstructured blob of page-sized virtual chunks
-/// Each heap gets exactly 1 Vulkan device heap bound to it, which it will then suballocate until it's exhausted
-const Heap = struct {
-    const VulkanAllocationPool = std.heap.MemoryPoolExtra(GPUBlock, .{
-        .growable = false,
-    });
-
-    pages: VulkanAllocationPool,
-    page_size: usize,
-
-
-    /// How big/how many pages should there be for this heap??? 
-    /// We mostly care about usage as it relates to size (or available budget)
-    /// to the application.
-    /// Note that this is more of an estimate then anything else, 
-    /// Vulkan allocations won't exactly match pages often, however the minimum allocation
-    /// size will be for individual pages.
-    fn deterimineVirtualMemProps(budget: *const api.DeviceMemoryBudget) struct {usize, usize} {
-        //TODO: I might consider using 2 separate heurstics depending on whether the Budget query extension is avialable
-    }
-
-    pub fn init(heap_budget: *const api.DeviceMemoryBudget, allocator: std.mem.Allocator) Error!Heap {
-        const page_size, const max_pages = deterimineVirtualMemProps(heap_budget);
-
-        return Heap{
-            // I distinguish host (app-side CPU) and GPU allocation failures,
-            // cuz otherwise shit gets confusing
-            .pages = VulkanAllocationPool.initPreheated(allocator, max_pages) catch {
-                return error.HostOutOfMemory;
-            },
-            .page_size = page_size,
-            .break_limit = 0,
-        };
-    }
-
-    /// Allocate new memory blocks. This either increases the break limit of an existing GPU block
-    /// or allocates a new one
-    pub fn grow(self: *Heap, reqs: vk.MemoryRequirements) void {
-    }
-};
-
-pub const Error = error{
-    HostOutOfMemory,
-    DeviceOutOfMemory,
-    NoMatchingHeap,
-    // InvalidConfiguration, This'll be handled with asserts in debug
-};
-
-/// Map of available memory heaps (pools)
-/// This is just an array with extra steps
-const HeapMap = struct {
-    heaps: []Heap,
-    /// prefills heaps with pools of handles
-    pub fn init(layout: *const api.DeviceMemoryLayout, allocator: std.mem.Allocator) Error!HeapMap {
-        const num_heaps = layout.memory_heaps.len;
-
-        const heaps = allocator.alloc(Heap, num_heaps) catch
-            return error.HostOutOfMemory;
-
-        for (heaps, layout.memory_heaps) |*heap, props| {
-            heap.* = try heap.init(props.index, props.supported_props);
-        }
-    }
-
-    pub fn get(self: *HeapMap, index: usize) Error!*Heap {
-        if (index >= self.heaps.len) return error.NoMatchingHeap;
-        return self.heaps[index];
-    }
-};
 
 /// Manages top-level handles to instantiated
 /// heap allocations for all included memory types
@@ -260,6 +189,8 @@ pub const VirtualAllocator = struct {
         };
     }
 
+    /// NOTE: This allocator doesn't support best fit re-indexing, 
+    /// that happens at a higher level.
     pub fn allocate(self: *VirtualAllocator, config: AllocationConfig) Error!Allocation {
         const resolved_config = config.flatten();
         const reqs = resolved_config.mem_reqs;
@@ -269,7 +200,7 @@ pub const VirtualAllocator = struct {
 
         var chosen_heap = try self.heaps.get(type_index);
 
-        const new_mem = try chosen_heap.grow(reqs);
+        return chosen_heap.grow(reqs);
     }
 };
 
