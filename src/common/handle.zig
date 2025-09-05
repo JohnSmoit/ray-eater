@@ -26,46 +26,27 @@ pub const OpaqueHandle = struct {
 
 const assert = std.debug.assert;
 
+pub const Config = struct {
+    index_bits: u16 = 32,
+    generation_bits: u16 = 32,
+};
+
+
 /// Typed handle, with support for derefrence
-pub fn Handle(comptime T: type) type {
-    return struct {
-        const Self = @This();
-        base: OpaqueHandle,
+pub fn TypedHandle(comptime T: type, comptime config: Config) type {
+    const IndexType: type = std.meta.Int(.unsigned, config.index_bits);
+    const GenerationType: type = std.meta.Int(.unsigned, config.generation_bits);
 
-        // TODO: Implement this so that you can't just pass any opaque handle --
-        // It needs to be guarunteed that the handle bound is of a compatible type
-        // -- TO do that, I'll need to implement at least some of the type-scoped allocators
-        // first
-        pub fn bindOpaque(self: *Self, new: OpaqueHandle) void {
-            assert(self.base.value.id == new.value.id);
-            self.base = new;
-        }
+    return packed struct {
+        const UnderlyingType = T;
+        const Handle = @This();
 
-        // these are ease-of-use pseudo-dereference operators
-        pub fn get(self: *const Self) *const T {
-            assert(self.base.type_data == .Single);
-            return self.base.value.get(T);
-        }
+        index: IndexType = 0,
+        gen: GenerationType = 0,
 
-        pub fn getMut(self: *Self) *T {
-            assert(self.base.type_data == .Single);
-            return self.base.value.get(T);
-        }
-
-        pub fn getMulti(self: *const Self) []const T {
-            assert(self.base.type_data == .Multi);
-            return @as(
-                [*]const T,
-                @ptrCast(self.base.value.get(T)),
-            )[0..self.base.type_data.Multi];
-        }
-
-        pub fn getMultiMut(self: *Self) []T {
-            assert(self.base.type_data == .Multi);
-            return @as(
-                [*]T,
-                @ptrCast(self.base.value.get(T)),
-            )[0..self.base.type_data.Multi];
+        pub fn bind(handle: *Handle, index: IndexType) void {
+            handle.index = index;
+            handle.gen += 1;
         }
     };
 }

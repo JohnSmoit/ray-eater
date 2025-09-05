@@ -2,7 +2,7 @@ const std = @import("std");
 const assert = std.debug.assert;
 
 const h = @import("handle.zig");
-pub const Handle = h.Handle;
+pub const Handle = h.TypedHandle;
 pub const OpaqueHandle = h.OpaqueHandle;
 
 // these resemble std's pools, but they have intrinsic support for handle
