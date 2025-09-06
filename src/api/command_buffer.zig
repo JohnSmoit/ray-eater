@@ -150,7 +150,7 @@ pub fn addEntries(reg: *Registry) !void {
 }
 
 pub const CommandBufferProxy = struct {
-    const CommandBufferHandle = common.Handle(CommandBuffer);
+    const CommandBufferHandle = common.Handle(CommandBuffer, .{});
 
     handle: CommandBufferHandle,
 

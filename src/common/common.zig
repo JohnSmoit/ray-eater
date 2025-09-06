@@ -7,8 +7,7 @@ pub const OpaqueHandle = h.OpaqueHandle;
 
 // these resemble std's pools, but they have intrinsic support for handle
 // indexing
-pub const OpaqueMemoryPool = @import("pool_allocator.zig");
-pub const MemoryPool = OpaqueMemoryPool.TypedPool;
+pub const ObjectPool = @import("object_pool.zig").ObjectPool;
 
 pub const config = @import("config.zig");
 pub const util = @import("util.zig");
@@ -77,4 +76,5 @@ pub fn APIFunction(func: anytype) APIFunctionType(func) {
 
 comptime {
     _ = @import("config.zig");
+    _ = @import("object_pool.zig");
 }

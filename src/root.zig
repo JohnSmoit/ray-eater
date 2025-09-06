@@ -15,7 +15,6 @@ pub const res = @import("resource_management/res.zig");
 
 // imports for testing
 comptime {
-    _ = @import("resource_management/pool_allocator.zig");
     _ = @import("resource_management/registry.zig");
     _ = @import("context.zig");
 }
