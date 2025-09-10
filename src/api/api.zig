@@ -22,6 +22,7 @@ pub const extensions = vk.extensions;
 pub const InstanceHandler = base.InstanceHandler; 
 pub const DeviceHandler = base.DeviceHandler;
 pub const SurfaceHandler = base.SurfaceHandler;
+pub const DeviceMemoryLayout = @import("memory/DeviceMemoryLayout.zig");
 
 pub const GraphicsQueue = queue.GraphicsQueue;
 pub const ComputeQueue = queue.ComputeQueue;
@@ -57,6 +58,7 @@ pub const DescriptorLayout = Descriptor.DescriptorLayout;
 pub const DescriptorType = common.DescriptorType;
 pub const DescriptorUsageInfo = common.DescriptorUsageInfo;
 
+
 // additional utility structs and stuff
 const types = @import("common_types.zig");
 pub const SyncInfo = types.SyncInfo;
@@ -73,4 +75,8 @@ const Registry = @import("../resource_management/res.zig").Registry;
 
 pub fn initRegistry(reg: *Registry) !void {
     try CommandBuffer.addEntries(reg);
+}
+
+comptime {
+    _ = @import("memory/allocator.zig");
 }

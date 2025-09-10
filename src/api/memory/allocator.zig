@@ -14,9 +14,9 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const common = @import("common");
-const api = @import("api.zig");
+const api = @import("../api.zig");
 
-const Context = @import("../context.zig");
+const Context = @import("../../context.zig");
 
 /// Represents an individual memory allocation..
 /// Depending on the allocated memory's properties,
@@ -39,8 +39,8 @@ pub const Error = error{
 };
 
 
-pub const Allocation = common.Handle(AllocationData);
-pub const Heap = common.Handle(HeapData);
+//pub const Allocation = common.Handle(AllocationData);
+//pub const Heap = common.Handle(HeapData);
 
 const AllocationScope = enum(u2) {
     /// General Purpose, Picks a free-list styled, static heap
@@ -109,6 +109,10 @@ pub const AllocationConfig = packed struct {
         /// allocator match isn't found
         best_fit: bool = true,
 
+        /// Relevant allocation is promised but may not actually be allocated until
+        /// the allocation is first accessed
+        lazy: bool = false,
+
         /// Force the allocator to perform a dedicated
         /// VkAllocateMemory specifically for this allocation (renders most configuration moot)
         dedicated_alloc_policy: DedicatedAllocationPolicyBits = .Unspecified,
@@ -151,11 +155,23 @@ pub const AllocationConfig = packed struct {
     general: GeneralFlags = .{},
 
     /// Flattens all nullable values and optional configuration parameters
-    /// into a common resolved layout
-    /// This shouldn't fail with an error, but just assert at you if you do invalid config
-    pub fn flatten(self: *const AllocationConfig) Resolved {}
+    /// into a common resolved layout.
+    /// This tends to ignore certain information 
+    /// in order to generate concrete allocation parameters so further config processing is
+    /// usually done by the configurable allocator beforehand to resolve which allocator to use
+    pub fn flatten(self: *const AllocationConfig) Resolved {
+        _ = self;
+        return undefined;
+    }
 };
 
+const Allocation = struct {
+    Fuck: u32,
+};
+
+const ReifiedAllocation = struct {
+    Me: u32,
+};
 
 /// Manages top-level handles to instantiated
 /// heap allocations for all included memory types
@@ -171,36 +187,50 @@ pub const AllocationConfig = packed struct {
 /// * Rather, it is better to use this as a parent allocator for a more efficient child allocator.
 ///   This ensures the giant memory blob is better utilized then being wasted on a single 24 byte 
 ///   uniform buffer.
+/// * Recommended not to instance this yourself, as every context's memory manager will come with
+///   an instanced version
+/// * This allocator uses an extremely basic algorithm which allocates and frees large blocks of memory
+///   with little regard for fragmentation, making it a poor choice anyways for a general-purpose allocator
 pub const VirtualAllocator = struct {
-    allocator: std.mem.Allocator,
+    /// Env's can be manually initialized if you don't want to 
+    /// go through the entire context init schtick
+    pub const Env = Context.EnvSubset(.{.mem_layout, .di});
 
-    dev_mem_layout: *const api.DeviceMemoryLayout,
-    di: *const api.DeviceInterface,
-    heaps: HeapMap,
+    allocator: std.mem.Allocator,
+    env: Env,
+
+    // Free list tracking which unfortunately can't be in-place sigh
+
 
     /// Doesn't actually do much rn but could anticipatorially do some ahead-of-time heap allocation
-    pub fn init(ctx: *const Context, allocator: std.mem.Allocator) Error!VirtualAllocator {
-        const layout = ctx.env(.dev_mem_layout);
+    pub fn init(
+        env: Env, 
+        allocator: std.mem.Allocator,
+    ) Error!VirtualAllocator {
         return VirtualAllocator{
             .allocator = allocator,
-            .di = ctx.env(.di),
-            .dev_mem_layout = layout,
-            .heaps = HeapMap.init(layout),
+            .env = env,
         };
     }
+
 
     /// NOTE: This allocator doesn't support best fit re-indexing, 
     /// that happens at a higher level.
     pub fn allocate(self: *VirtualAllocator, config: AllocationConfig) Error!Allocation {
-        const resolved_config = config.flatten();
-        const reqs = resolved_config.mem_reqs;
-        const props = resolved_config.mem_props;
+        _ = self;
+        _ = config;
 
-        const type_index: u32 = self.dev_mem_layout.findCompatibleHeapIndex(reqs, props) orelse return Error.NoMatchingHeap;
+        return undefined;
+    }
+    
+    /// This version returns a reified handle to the allocation table
+    /// which is essentially combined data and API along with pointer to the backing pool
+    /// for that classic OOP feel (even if it's all a lie)
+    pub fn allocateReified(self: *VirtualAllocator, config: AllocationConfig) Error!ReifiedAllocation {
+        _ = self;
+        _ = config;
 
-        var chosen_heap = try self.heaps.get(type_index);
-
-        return chosen_heap.grow(reqs);
+        return undefined;
     }
 };
 
@@ -248,3 +278,12 @@ pub const VirtualAllocator = struct {
 //     // Way 3: Automated:
 //     const my_buffer4 = try VertexBuffer.initAlloc(ctx, .{yadda yadda});
 // }
+
+const debug = std.debug;
+
+test "compiles" {
+    const thing = @typeInfo(VirtualAllocator);
+    inline for (thing.@"struct".fields) |fld| {
+        std.debug.print("Field: {s}\n", .{fld.name});
+    }
+}

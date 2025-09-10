@@ -35,6 +35,9 @@ const EnvBacking = struct {
     gi: Ref(GlobalInterface, .{ .field = "global_interface" }),
     ii: Ref(InstanceInterface, .{ .field = "inst_interface" }),
     di: Ref(DeviceInterface, .{ .field = "dev_interface" }),
+
+    mem_layout: Ref(api.DeviceMemoryLayout, .{}),
+
 };
 const Environment = e.For(EnvBacking);
 
@@ -240,6 +243,40 @@ pub fn presentFrame(
     try self.present_queue.present(swapchain, image, sync.sem_wait);
 }
 
+const meta = std.meta;
+
+/// Defines an env subset type which can be automatically populated by a factory
+pub fn EnvSubset(comptime fields: anytype) type {
+    const StructField = std.builtin.Type.StructField;
+    //const num_fields = fields.len;
+
+    comptime var field_infos: []const StructField = &.{};
+    for (fields) |enum_lit| {
+        const matching_field = meta.fieldInfo(EnvBacking, enum_lit);
+        const MatchingFieldType = matching_field.type;
+        
+
+        // This is janky due to how the env system mapps fields oops
+        const mapped_field_info = StructField{
+            .default_value_ptr = null,
+            .type = MatchingFieldType.InnerType,
+            .is_comptime = false,
+            .alignment = @alignOf(MatchingFieldType.InnerType),
+            .name = matching_field.name,
+        };
+        field_infos = field_infos ++ [1]StructField{mapped_field_info};
+    }
+
+    return @Type(.{
+        .@"struct" = .{
+            .fields = field_infos,
+            .decls = &.{},
+            .layout = .auto,
+            .is_tuple = false,
+        },
+    });
+}
+
 //BUG: This cannot work since windowless contexts would require
 //a lot more features that I currently support
 // test "windowless context" {
@@ -264,5 +301,3 @@ pub fn presentFrame(
 //             .pool_sizes = 1024,
 //         },
 //     });
-//     defer ctx.deinit();
-// }

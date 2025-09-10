@@ -6,7 +6,7 @@
 //! which match vulkan object's lifetimes (generally they are the same per-type of object)
 
 const std = @import("std");
-const common = @import("common");
+const common = @import("common.zig");
 const builtin = @import("builtin");
 const debug = std.debug;
 
@@ -76,6 +76,8 @@ pub fn ObjectPool(comptime T: type, comptime config: Config) type {
     if (@typeInfo(config.IndexType).int.signedness != .unsigned)
         @compileError("IndexType must be unsigned");
 
+
+
     const resolved_alignment = if (config.alignment) |al|
         al
     else
@@ -92,27 +94,34 @@ pub fn ObjectPool(comptime T: type, comptime config: Config) type {
             page: *Page,
         };
 
-        pub const Handle = packed struct {
-            pub const PartitionedIndex = PartitionIndexType(IndexType, page_size);
-            index: PartitionedIndex,
-            gen: IndexType,
+        pub const Handle = common.Handle(T, .{
+            .index_bits = @typeInfo(config.IndexType).int.bits,
+            .gen_bits = @typeInfo(config.IndexType).int.bits,
+            .partition_bit = 12,
+        });
+
+        fn getReified(p: *anyopaque, h: Handle) PoolError!*T {
+            const pool: *Pool = @ptrCast(@alignCast(p));
+            return pool.get(h);
+        }
+
+        pub const ReifiedHandle = Handle.Reified(PoolError, getReified);
             
-            // These 2 functions are meant to update state in the stored handle state 
-            // of the pool, not the handles the user gets
-            pub fn bind(h: *Handle, idx: usize, page_index: usize) void {
-                debug.assert(idx < std.math.maxInt(IndexType));
-                debug.assert(page_index < std.math.maxInt(IndexType));
+        // These 2 functions are meant to update state in the stored handle state 
+        // of the pool, not the handles the user gets
+        fn bind(h: *Handle, idx: usize, page_index: usize) void {
+            debug.assert(idx < std.math.maxInt(IndexType));
+            debug.assert(page_index < std.math.maxInt(IndexType));
 
-                h.index.addr = @intCast(idx);
-                h.index.page_index = @intCast(page_index);
-            }
+            h.index.lhs = @intCast(idx);
+            h.index.rhs = @intCast(page_index);
+        }
 
-            pub fn unbind(h: *Handle) void {
-                h.index.addr = 0;
-                h.index.page_index = 0;
-                h.gen += 1;
-            }
-        };
+        fn unbind(h: *Handle) void {
+            h.index.lhs = 0;
+            h.index.rhs = 0;
+            h.gen += 1;
+        }
 
         /// Pages are broken into 2 separately alligned sections of memory
         /// - Handles (contiains handle information mainly gen count)
@@ -285,10 +294,10 @@ pub fn ObjectPool(comptime T: type, comptime config: Config) type {
         }
 
         fn fetchPageIfValid(pool: *Pool, h: Handle) PoolError!*Page {
-            debug.assert(h.index.page_index <= pool.page_table.items.len);
-            const page = pool.page_table.items[h.index.page_index];
+            debug.assert(h.index.rhs <= pool.page_table.items.len);
+            const page = pool.page_table.items[h.index.rhs];
 
-            const handle = page.handles[h.index.addr];
+            const handle = page.handles[h.index.lhs];
             if (h.gen != handle.gen) return error.InvalidHandle;
 
             return page;
@@ -297,7 +306,7 @@ pub fn ObjectPool(comptime T: type, comptime config: Config) type {
         // get an element outta the pool
         pub fn get(pool: *Pool, h: Handle) PoolError!*T {
             const page = try pool.fetchPageIfValid(h);
-            return @as(*T, @ptrCast(@alignCast(&page.slots[h.index.addr])));
+            return @as(*T, @ptrCast(@alignCast(&page.slots[h.index.lhs])));
         }
         
         /// reserve a single handle and allocate if needed
@@ -308,7 +317,7 @@ pub fn ObjectPool(comptime T: type, comptime config: Config) type {
             const index = indexForNode(node);
 
             const handle = &node.page.handles[index];
-            handle.bind(index, @intCast(node.page.index));
+            bind(handle, index, @intCast(node.page.index));
 
             return handle.*;
         }
@@ -322,6 +331,19 @@ pub fn ObjectPool(comptime T: type, comptime config: Config) type {
             return h;
         }
 
+        /// Reserve an item and retain memory of which pool allocated it in the handle
+        /// (essentially "reifying the handle" by 
+        /// giving all the information needed to resolve the data)
+        pub fn reserveReified(pool: *Pool) PoolError!ReifiedHandle {
+            const h = try pool.reserve();
+            return ReifiedHandle.init(h, pool);
+        }
+
+        pub fn reserveAssumeCapacityReified(pool: *Pool) ReifiedHandle {
+            const h = pool.reserveAssumeCapacity();
+            return ReifiedHandle.init(h, pool);
+        }
+
         /// reserve a single handle whilst assuming there is space
         /// Useful if you know that the pool will have space for a reservation
         /// and you don't want to deal with an unreachable failure point
@@ -331,7 +353,7 @@ pub fn ObjectPool(comptime T: type, comptime config: Config) type {
             const index = indexForNode(node);
             
             const handle = &node.page.handles[index];
-            handle.bind(index, node.page.index);
+            bind(handle, index, node.page.index);
 
             return handle.*;
         }
@@ -348,10 +370,10 @@ pub fn ObjectPool(comptime T: type, comptime config: Config) type {
         /// return a handle to the pool, freeing it.
         pub fn free(pool: *Pool, h: Handle) void {
             const page = pool.fetchPageIfValid(h) catch return;
-            const backing_h = &page.handles[h.index.addr];
-            const former_slot: *FreeNode = @ptrCast(&page.slots[h.index.addr]);
+            const backing_h = &page.handles[h.index.lhs];
+            const former_slot: *FreeNode = @ptrCast(&page.slots[h.index.lhs]);
             
-            backing_h.unbind();
+            unbind(backing_h);
             pool.prependFreeNode(former_slot);
         } 
 
@@ -429,6 +451,7 @@ test "growable pool" {
     var pool = try ObjectPool(TestingTypeB, .{}).init(testing.allocator, 1);
     defer pool.deinit();
 
+
     for (0..5000) |_| {
         _ = try pool.reserve();
     }
@@ -500,4 +523,22 @@ test "use after free" {
     //try pool.preheat(20);
 
     //try testing.expectError(error.InvalidHandle, pool.get(h2)); 
+}
+
+test "reification" {
+    const TestStruct = struct {
+        name: []const u8,
+        id: usize,
+    };
+    var pool = try ObjectPool(TestStruct, .{.growable = false}).init(testing.allocator, 128);
+    defer pool.deinit();
+
+    const h = try pool.reserveInit(.{
+        .name = "larry the libster",
+        .id = 932932,
+    });
+
+    const h2 = ObjectPool(TestStruct, .{.growable = false}).ReifiedHandle.init(h, &pool);
+
+    try testing.expectEqual(try pool.get(h), try h2.get());
 }

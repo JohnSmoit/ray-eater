@@ -17,4 +17,5 @@ pub const res = @import("resource_management/res.zig");
 comptime {
     _ = @import("resource_management/registry.zig");
     _ = @import("context.zig");
+    _ = @import("api/api.zig");
 }
