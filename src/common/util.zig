@@ -69,25 +69,26 @@ pub inline fn transformMemUnits(
     comptime to: BasicMemUnits, 
     val: anytype
 ) @TypeOf(val) {
-    const info = @typeInfo(@TypeOf(val));
-    const num, const denom = comptime blk: {
-        var a = 1;
-        var b = 1;
+    const ValueType = @TypeOf(val);
+    const info = @typeInfo(ValueType);
 
-        for (0..@intFromEnum(to)) |_| {
-            a *= 1024;
-        }
-        for (0..@intFromEnum(from)) |_| {
-            b *= 1024;
-        }
+    var a: ValueType = 1;
+    var b: ValueType = 1;
 
-        break :blk .{a, b};
-    };
+    for (0..@intFromEnum(to)) |_| {
+        a *= 1024;
+    }
+    for (1..@intFromEnum(from)) |_| {
+        b *= 1024;
+    }
+
+
     if (info == .int) {
-        return @divFloor(num, denom) * val;
+        return @divFloor(a, b) * val;
     } else {
-        const fnum: @TypeOf(val) = @floatFromInt(num);
-        const fden: @TypeOf(val) = @floatFromInt(denom);
+        const fnum: ValueType = @floatFromInt(a);
+        const fden: ValueType = @floatFromInt(b);
+
         return (fnum / fden) * val; 
     }
 }

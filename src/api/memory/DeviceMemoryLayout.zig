@@ -95,7 +95,7 @@ pub fn compatibleTypeInHeap(
         if (layout.type_heap_index[t] != heap) continue;
         const type_props = layout.prop_type_index[t];
         
-        if (type_props.contains(props)) return t;
+        if (type_props.contains(props)) return @intCast(t);
     }
 
     return null;
