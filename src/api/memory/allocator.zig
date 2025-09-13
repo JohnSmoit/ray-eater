@@ -111,6 +111,8 @@ pub const AllocationConfig = packed struct {
 
         /// Relevant allocation is promised but may not actually be allocated until
         /// the allocation is first accessed
+        /// NOTE: Uuuhhh, I gotta make sure this actually guaruntees a valid memory allocation
+        /// when its needed
         lazy: bool = false,
 
         /// Force the allocator to perform a dedicated
@@ -159,19 +161,18 @@ pub const AllocationConfig = packed struct {
     /// This tends to ignore certain information 
     /// in order to generate concrete allocation parameters so further config processing is
     /// usually done by the configurable allocator beforehand to resolve which allocator to use
+    /// This is moreso "stage 2" resolution as defined in the spec
     pub fn flatten(self: *const AllocationConfig) Resolved {
         _ = self;
         return undefined;
     }
 };
 
-const Allocation = struct {
-    Fuck: u32,
-};
+const Allocation = common.Handle(AllocationData, .{
+    .partition_bit = 12,
+});
 
-const ReifiedAllocation = struct {
-    Me: u32,
-};
+const ReifiedAllocation = Allocation.Reified;
 
 /// Manages top-level handles to instantiated
 /// heap allocations for all included memory types
@@ -231,6 +232,11 @@ pub const VirtualAllocator = struct {
         _ = config;
 
         return undefined;
+    }
+
+    pub fn free(self: *VirtualAllocator, mem: Allocation) void {
+        _ = self;
+        _ = mem;
     }
 };
 

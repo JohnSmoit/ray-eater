@@ -4,7 +4,7 @@ const std = @import("std");
 
 const log = std.log.scoped(.buffer);
 const meth = @import("../math.zig");
-const util = @import("../util.zig");
+const util = @import("common").util;
 
 const CommandBuffer = @import("command_buffer.zig");
 const DeviceHandler = @import("base.zig").DeviceHandler;

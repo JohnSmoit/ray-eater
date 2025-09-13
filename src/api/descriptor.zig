@@ -3,7 +3,7 @@
 const std = @import("std");
 
 const vk = @import("vulkan");
-const util = @import("../util.zig");
+const util = @import("common").util;
 const common = @import("common_types.zig");
 
 const api = @import("api.zig");

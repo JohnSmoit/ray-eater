@@ -3,7 +3,7 @@
 const vk = @import("vulkan");
 const std = @import("std");
 const glfw = @import("glfw");
-const util = @import("../util.zig");
+const util = @import("common").util;
 const api = @import("api.zig");
 
 const Allocator = std.mem.Allocator;
@@ -56,10 +56,6 @@ pub const InstanceHandler = struct {
             validation_layers: []const [*:0]const u8,
         },
 
-        device: struct {
-            required_extensions: []const [*:0]const u8,
-        },
-
         loader: GetProcAddrHandler,
         allocator: Allocator,
         enable_debug_log: bool,
@@ -98,7 +94,7 @@ pub const InstanceHandler = struct {
         };
     }
 
-    fn createInstance(self: *InstanceHandler, config: *const Config) !void {
+    fn createInstance(self: *InstanceHandler, config: Config) !void {
 
         // log the available extensions
         const available = self.w_db.enumerateInstanceExtensionPropertiesAlloc(
@@ -182,7 +178,7 @@ pub const InstanceHandler = struct {
         );
     }
 
-    fn loadBase(self: *InstanceHandler, config: *const Config) !void {
+    fn loadBase(self: *InstanceHandler, config: Config) !void {
         self.w_db = vk.BaseWrapper.load(config.loader);
 
         // check to see if the dispatch table loading fucked up
@@ -192,7 +188,7 @@ pub const InstanceHandler = struct {
         }
     }
 
-    pub fn init(config: *const Config) !InstanceHandler {
+    pub fn init(config: Config) !InstanceHandler {
         var ctx: InstanceHandler = .{
             .allocator = config.allocator,
         };
@@ -226,7 +222,7 @@ pub const InstanceHandler = struct {
 //TODO: Yeet into a non-owning view of context
 pub const DeviceHandler = struct {
     pub const Config = struct {
-        surface: *const SurfaceHandler,
+        surface: ?*const SurfaceHandler,
         required_extensions: []const [*:0]const u8 = &[0][*:0]const u8{},
     };
 
@@ -329,7 +325,7 @@ pub const DeviceHandler = struct {
     // TODO: Support overlap in queue families
     // (i.e) some queues might support both compute and graphics operations
     families: FamilyIndices,
-    swapchain_details: SwapchainSupportDetails,
+    swapchain_details: ?SwapchainSupportDetails,
 
     h_dev: vk.Device = .null_handle,
     h_pdev: vk.PhysicalDevice = .null_handle,
@@ -380,7 +376,7 @@ pub const DeviceHandler = struct {
     fn getQueueFamilies(
         dev: vk.PhysicalDevice,
         pr_inst: *const vk.InstanceProxy,
-        surface: *const SurfaceHandler,
+        surface: ?*const SurfaceHandler,
         allocator: Allocator,
     ) FamilyIndices {
         var found_indices: FamilyIndices = .{
@@ -412,13 +408,16 @@ pub const DeviceHandler = struct {
             })) {
                 found_indices.compute_family = i;
             }
-
-            if ((pr_inst.getPhysicalDeviceSurfaceSupportKHR(
-                dev,
-                i,
-                surface.h_surface,
-            ) catch vk.FALSE) == vk.TRUE) {
-                found_indices.present_family = i;
+    
+            // HACK: Guhh
+            if (surface) |surf| {
+                if ((pr_inst.getPhysicalDeviceSurfaceSupportKHR(
+                    dev,
+                    i,
+                    surf.h_surface,
+                ) catch vk.FALSE) == vk.TRUE) {
+                    found_indices.present_family = i;
+                }
             }
         }
 
@@ -452,7 +451,7 @@ pub const DeviceHandler = struct {
     // This will likely require a bit of upgrade when I consider making this project more portable
     fn pickSuitablePhysicalDevice(
         pr_inst: *const vk.InstanceProxy,
-        config: *const Config,
+        config: Config,
         allocator: Allocator,
     ) ?vk.PhysicalDevice {
         const physical_devices =
@@ -480,7 +479,7 @@ pub const DeviceHandler = struct {
 
     // Later on, I plan to accept a device properties struct
     // which shall serve as the criteria for choosing a graphics unit
-    pub fn init(parent: *const InstanceHandler, config: *const Config) !DeviceHandler {
+    pub fn init(parent: *const InstanceHandler, config: Config) !DeviceHandler {
         // attempt to find a suitable device -- hardcoded for now
         const chosen_dev = pickSuitablePhysicalDevice(
             &parent.pr_inst,
@@ -500,15 +499,23 @@ pub const DeviceHandler = struct {
             parent.allocator,
         );
 
-        // just enable all the available features lmao
+        //HACK: Extremely lazy fix for device being hardcoded
+        //for a surface. Please replace this once proper featureset
+        //support exists
         const dev_features = parent.pr_inst.getPhysicalDeviceFeatures(chosen_dev);
-        const swapchain_details = getDeviceSupport(
-            &parent.pr_inst,
-            config.surface,
-            chosen_dev,
-            parent.allocator,
-        ) catch unreachable;
-        errdefer swapchain_details.deinit();
+        const swapchain_details = if (config.surface) |surf| 
+            getDeviceSupport(
+                &parent.pr_inst,
+                surf,
+                chosen_dev,
+                parent.allocator,
+            ) catch unreachable
+        else
+            null;
+
+        if (swapchain_details) |sd| {
+            errdefer sd.deinit();
+        }
 
         const priority = [_]f32{1.0};
 
@@ -520,7 +527,8 @@ pub const DeviceHandler = struct {
                 .p_queue_priorities = &priority,
             },
             .{
-                .queue_family_index = dev_queue_indices.present_family.?,
+                .queue_family_index = dev_queue_indices.present_family orelse
+                    undefined,
                 .queue_count = 1,
                 .p_queue_priorities = &priority,
             },
@@ -528,7 +536,7 @@ pub const DeviceHandler = struct {
 
         const logical_dev = parent.pr_inst.createDevice(chosen_dev, &.{
             .p_queue_create_infos = &queue_create_infos,
-            .queue_create_info_count = queue_create_infos.len,
+            .queue_create_info_count = if (config.surface != null) queue_create_infos.len else 1,
             .p_enabled_features = @ptrCast(&dev_features),
             .pp_enabled_extension_names = config.required_extensions.ptr,
             .enabled_extension_count = @intCast(config.required_extensions.len),
@@ -591,7 +599,11 @@ pub const DeviceHandler = struct {
         self.pr_dev.destroyDevice(null);
 
         self.ctx.allocator.destroy(self.dev_wrapper);
-        self.swapchain_details.deinit();
+        // HACK: Quick fix to get device working without a window
+        // surface, please replace once proper featuresets are introduced
+        if (self.swapchain_details) |*sd| {
+            sd.deinit();
+        }
     }
 
     pub fn getMemProperties(self: *const DeviceHandler) vk.PhysicalDeviceMemoryProperties {

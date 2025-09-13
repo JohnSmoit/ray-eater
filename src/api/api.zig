@@ -79,4 +79,5 @@ pub fn initRegistry(reg: *Registry) !void {
 
 comptime {
     _ = @import("memory/allocator.zig");
+    _ = @import("memory/Heap.zig");
 }

@@ -7,12 +7,18 @@ const RefConfig = struct {
     field: ?[]const u8 = null,
     mutable: bool = false,
 };
+
+fn ResolveInnerType(comptime T: type, comptime config: RefConfig) type {
+     const AsPtr = if (!config.mutable) *const T else *T;
+
+    return if (@typeInfo(T) == .pointer) T else AsPtr;
+}
 /// returns a const non-owning pointer to the object
 /// (might enforce a bit more memory safety here later)
 pub fn Ref(comptime T: type, comptime config: RefConfig) type {
     return struct {
         pub const field = config.field;
-        pub const InnerType = if (!config.mutable) *const T else *T;
+        pub const InnerType = ResolveInnerType(T, config);
         const Self = @This();
 
         inner: InnerType,

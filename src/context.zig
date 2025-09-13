@@ -49,9 +49,9 @@ inst: Instance,
 dev: Device,
 surf: Surface,
 
-global_interface: *const GlobalInterface,
-inst_interface: *const InstanceInterface,
-dev_interface: *const DeviceInterface,
+global_interface: GlobalInterface,
+inst_interface: InstanceInterface,
+dev_interface: DeviceInterface,
 
 graphics_queue: api.GraphicsQueue,
 present_queue: api.PresentQueue,
@@ -151,7 +151,7 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
     // Later on, I'll have some better ways to handle ownership and lifetimes
     // then just raw heap allocations lol (Working on it)
 
-    new.inst = try Instance.init(&.{
+    new.inst = try Instance.init(.{
         .instance = .{
             .required_extensions = all_inst_ext.items,
             .validation_layers = &.{
@@ -159,9 +159,7 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
             },
         },
         .allocator = allocator,
-        .device = undefined,
         .enable_debug_log = true,
-
         .loader = config.loader,
     });
     errdefer new.inst.deinit();

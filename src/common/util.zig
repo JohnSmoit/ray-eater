@@ -2,6 +2,7 @@
 //! Most of this is completely unused and useless, so 
 //! only a bit of this iwll be included...
 const std = @import("std");
+const builtin = @import("builtin");
 pub fn asCString(rep: anytype) [*:0]const u8 {
     return @as([*:0]const u8, @ptrCast(rep));
 }
@@ -43,6 +44,65 @@ pub fn tryGetField(info: *const StructInfo, name: []const u8) ?*const StructFiel
     }
 
     return null;
+}
+
+/// returns the percentage of a number
+/// should work for all numeric types
+pub fn pct(num: anytype, percentage: @TypeOf(num)) @TypeOf(num) {
+    return @divTrunc(num * percentage, 100);
+}
+
+
+const BasicMemUnits = enum(usize) {
+    Bytes,
+    Kilobytes,
+    Megabytes,
+    Gigabytes,
+};
+
+
+/// Obviously, val should be numerical, but should
+/// otherwise work with integral and floating points,
+/// illegal divisions notwithstanding.
+pub inline fn transformMemUnits(
+    comptime from: BasicMemUnits, 
+    comptime to: BasicMemUnits, 
+    val: anytype
+) @TypeOf(val) {
+    const info = @typeInfo(@TypeOf(val));
+    const num, const denom = comptime blk: {
+        var a = 1;
+        var b = 1;
+
+        for (0..@intFromEnum(to)) |_| {
+            a *= 1024;
+        }
+        for (0..@intFromEnum(from)) |_| {
+            b *= 1024;
+        }
+
+        break :blk .{a, b};
+    };
+    if (info == .int) {
+        return @divFloor(num, denom) * val;
+    } else {
+        const fnum: @TypeOf(val) = @floatFromInt(num);
+        const fden: @TypeOf(val) = @floatFromInt(denom);
+        return (fnum / fden) * val; 
+    }
+}
+
+
+pub inline fn megabytes(val: anytype) @TypeOf(val) {
+    return transformMemUnits(.Megabytes, .Bytes, val);
+}
+
+pub inline fn assertMsg(ok: bool, comptime msg: []const u8) void {
+    if (builtin.mode == .Debug or builtin.mode == .ReleaseSafe) {
+        if (!ok) {
+            @panic("Assertion failed: " ++ msg);
+        }
+    }
 }
 
 pub fn signatureMatches(a: *const Function, b: *const Function) bool {
