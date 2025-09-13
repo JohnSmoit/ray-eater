@@ -1,6 +1,7 @@
 //! A pretty temporary implementation for
 //! basic descriptor management in vulkan, manages it's own pool for now
 const std = @import("std");
+const debug = std.debug;
 
 const vk = @import("vulkan");
 const util = @import("common").util;
@@ -255,7 +256,6 @@ const DescriptorBinding = union(DescriptorType) {
     },
 };
 
-const debug = std.debug;
 
 // Descriptor layouts done better
 pub const DescriptorLayout = struct {

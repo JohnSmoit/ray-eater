@@ -41,7 +41,7 @@ extern fn glfwCreateWindowSurface(instance: vk.Instance, window: *GLFWwindow, al
 pub const getInstanceProcAddress = glfwGetInstanceProcAddress;
 
 pub const init = ErrorOnFalse(c.glfwInit, error.GLFWInitFailed);
-pub const terminate = c.glfwTerminate;
+pub const deinit = c.glfwTerminate;
 pub const vulkanSupported = ErrorOnFalse(c.glfwVulkanSupported, error.VulkanUnsupported);
 pub const getRequiredInstanceExtensions = c.glfwGetRequiredInstanceExtensions;
 pub const getFramebufferSize = c.glfwGetFramebufferSize;

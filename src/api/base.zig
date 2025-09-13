@@ -95,8 +95,6 @@ pub const InstanceHandler = struct {
     }
 
     fn createInstance(self: *InstanceHandler, config: Config) !void {
-
-        // log the available extensions
         const available = self.w_db.enumerateInstanceExtensionPropertiesAlloc(
             null,
             config.allocator,
@@ -104,6 +102,7 @@ pub const InstanceHandler = struct {
             log.debug("Failed to enumerate extension properties... this is probably bad.\n", .{});
             return error.ExtensionEnumerationFailed;
         };
+
         defer config.allocator.free(available);
 
         log.debug("Available Extensions:", .{});

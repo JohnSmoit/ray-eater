@@ -29,6 +29,15 @@ pub const Error = error {
     InvalidOpaqueCaptureAddressKHR,
 };
 
+/// Since memory type bits are a pain to set manually,
+/// I'll try to keep that automated as much as I can,
+/// hence the need for this equivalent struct with defualt values
+pub const MemoryRequirements = struct {
+    size: vk.DeviceSize,
+    alignment: vk.DeviceSize,
+    memory_type_bits: ?u32 = null,
+};
+
 env: Env,
 index: u32,
 available_budget: usize,
@@ -58,17 +67,22 @@ inline fn matchesMask(bit: u32, mask: u32) bool {
 pub fn alloc(
     heap: *Heap, 
     mem_type: u32, 
-    reqs: vk.MemoryRequirements,
+    reqs: MemoryRequirements,
 ) Error!vk.DeviceMemory {
-    debug.assert(mem_type < vk.MAX_MEMORY_TYPES);
-    debug.assert(matchesMask(mem_type, reqs.memory_type_bits));
+    var resolved_reqs = reqs;
+    if (resolved_reqs.memory_type_bits == null) {
+        resolved_reqs.memory_type_bits = @as(u32, 1) << @as(u5, @intCast(mem_type));
+    }
 
-    util.assertMsg(reqs.size >= util.megabytes(@as(vk.DeviceSize, 16)), 
+    debug.assert(mem_type < vk.MAX_MEMORY_TYPES);
+    debug.assert(matchesMask(mem_type, resolved_reqs.memory_type_bits.?));
+
+    util.assertMsg(resolved_reqs.size >= util.megabytes(@as(vk.DeviceSize, 16)), 
         "Due to GPU memory restrictions, small dedicated allocations must use \"allocSmall\"",
     );
 
     return heap.env.di.allocateMemory(&.{
-        .allocation_size   = reqs.size,
+        .allocation_size   = resolved_reqs.size,
         .memory_type_index = mem_type,
     }, null);
 }
@@ -76,7 +90,7 @@ pub fn alloc(
 pub fn allocWithProps(
     heap: *Heap, 
     props: vk.MemoryPropertyFlags, 
-    reqs: vk.MemoryRequirements,
+    reqs: MemoryRequirements,
 ) Error!vk.DeviceMemory {
     const mem_type = heap.env.mem_layout.compatibleTypeInHeap(heap.index, props) orelse
         return error.IncompatibleProperties;
@@ -124,14 +138,17 @@ test "raw heap allocations" {
     // Raw map memory for a write/read cycle
     const mem_handle = try heap.allocWithProps(testing_props, .{
         .size = 128,
-        .alignment = 4,
-        .memory_type_bits = 0,
+        .alignment = 1,
     });
-    _ = mem_handle;
 
-    //const mem = try minimal_vulkan.di.mapMemory(mem_handle);
-    //mem.* = "100 bottles of beer on the wall";
+    const mem = @as(
+        [*]u8, 
+        @ptrCast(@alignCast(
+            try minimal_vulkan.di.mapMemory(mem_handle, 0, 128, .{})
+        )),
+    )[0..128];
 
-    //try minimal_vulkan.di.unmapMemory(mem_handle);
-    // If it doesn't segfault or yield validation errors, then it worked.
+    std.mem.copyForwards(u8, mem, "100 bottles of beer on the wall");
+
+    minimal_vulkan.di.unmapMemory(mem_handle);
 }

@@ -33,6 +33,8 @@ pub const MinimalVulkanContext = struct {
     ) !*MinimalVulkanContext {
         const new_ctx = try allocator.create(MinimalVulkanContext);
 
+        try glfw.init();
+
         const min_inst_ext = [_][*:0]const u8{
             api.extensions.khr_get_physical_device_properties_2.name,
             api.extensions.ext_debug_utils.name,
@@ -86,6 +88,8 @@ pub const MinimalVulkanContext = struct {
         ctx.inst.deinit();
 
         allocator.destroy(ctx);
+
+        glfw.deinit();
     }
 };
 

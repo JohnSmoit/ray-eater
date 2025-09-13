@@ -286,10 +286,3 @@ pub const VirtualAllocator = struct {
 // }
 
 const debug = std.debug;
-
-test "compiles" {
-    const thing = @typeInfo(VirtualAllocator);
-    inline for (thing.@"struct".fields) |fld| {
-        std.debug.print("Field: {s}\n", .{fld.name});
-    }
-}

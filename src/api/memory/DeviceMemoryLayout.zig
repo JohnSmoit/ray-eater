@@ -68,13 +68,13 @@ pub fn init(
     ) |i, *prop, *h| {
         prop.* = mem_props.memory_types[i].property_flags;
         h.* = mem_props.memory_types[i].heap_index;
+
+        const heap_props = &new_layout.heap_prop_index[h.*].supported_type_props;
+        heap_props.* = heap_props.merge(prop.*);
     }
 
     for (0.., &new_layout.heap_prop_index) |i, *prop| {
-        prop.* = HeapProperties{
-            .max_size = mem_props.memory_heaps[i].size,
-            .supported_type_props = undefined,
-        };
+        prop.max_size = mem_props.memory_heaps[i].size;
     }
 
     return new_layout;
