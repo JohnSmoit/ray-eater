@@ -26,8 +26,8 @@ fn debugCallback(
     p_user_data: ?*anyopaque,
 ) callconv(.c) vk.Bool32 {
     const callback_data = p_callback_data orelse {
-        validation_log.err(
-            "Something probably bad happened but vulkan won't fucking give me the info",
+        std.debug.print(
+            "Something probably bad happened but vulkan won't fucking give me the info\n",
             .{},
         );
         return vk.FALSE;
@@ -37,8 +37,8 @@ fn debugCallback(
     // That way, logging levels will work for vulkan validation as well..
     const msg_level = message_severity.toInt();
 
-    validation_log.debug(
-        "{d} -- {s}",
+    std.debug.print(
+        "{d} -- {s}\n",
         .{ msg_level, callback_data.p_message orelse "Fuck" },
     );
 

@@ -140,6 +140,8 @@ test "raw heap allocations" {
         .size = 128,
         .alignment = 1,
     });
+    defer heap.free(mem_handle);
+
 
     const mem = @as(
         [*]u8, 
