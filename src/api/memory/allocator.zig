@@ -6,11 +6,6 @@
 //! to the standard memory allocation interface (if I can I will support creating
 //! std.mem.Allocators).
 
-/// GAYAYUIQHOIUDSAHIUHDLIHGLUSDhlhfLIHUDS
-/// Guhh, now we're doing memeory management for the memory management fuuuuuuuuck.
-/// Guhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh
-///
-
 const std = @import("std");
 const vk = @import("vulkan");
 const common = @import("common");
@@ -18,18 +13,7 @@ const api = @import("../api.zig");
 
 const Context = @import("../../context.zig");
 
-/// Represents an individual memory allocation..
-/// Depending on the allocated memory's properties,
-/// Accessing the memory might require creating a staging buffer
-/// or flushing and invalidating cached host-mapped memory
-///
-/// Probably should handleify this, to make allocations more resistant
-/// to changes in location and such
-const AllocationData = struct {
-    src_heap: vk.DeviceMemory,
-    offset: u32,
-    size: u32,
-};
+const allocation = @import("allocation.zig");
 
 pub const Error = error{
     HostOutOfMemory,
@@ -39,8 +23,9 @@ pub const Error = error{
 };
 
 
-//pub const Allocation = common.Handle(AllocationData);
-//pub const Heap = common.Handle(HeapData);
+const Allocation = allocation.Allocation;
+const ReifiedAllocation = allocation.ReifiedAllocation;
+
 
 const AllocationScope = enum(u2) {
     /// General Purpose, Picks a free-list styled, static heap
@@ -58,6 +43,17 @@ const AllocationScope = enum(u2) {
     /// Never freed. Exists across all scenes, Note that freeing may be a no-op in some cases
     /// So be careful to only reserve what is necessary for static memory
     Static,
+};
+
+const ResourceLayoutType = enum(u1) {
+    /// The resource is expected to have a linear,
+    /// (i.e a contiguous array) layout, which concerns buffers.
+    /// This does not imply that the actual user-defined layout of a buffer needs to be a specific way,
+    /// moreso that the resource won't use any vulkan driver supported layout options.
+    Linear,
+    /// The resource is expected to have a varying/vulkan
+    /// supported layout. This applies mostly to images
+    Optimal,
 };
 
 const AllocationPropertyFlags = packed struct {
@@ -78,7 +74,7 @@ const AllocationPropertyFlags = packed struct {
     /// How long will this allocation live?
     /// This will control which heap and which allocation algorithm
     /// will be used for this allocation
-    lifetime_hint: AllocationScope = .General,
+    lifetime_hint: AllocationScope = .General,  
 };
 
 const StructureHints = packed struct {
@@ -119,12 +115,16 @@ pub const AllocationConfig = packed struct {
         /// VkAllocateMemory specifically for this allocation (renders most configuration moot)
         dedicated_alloc_policy: DedicatedAllocationPolicyBits = .Unspecified,
     };
-
+    
+    /// This is the final layout of configuration
+    /// required for the allocation algorithm to actually specify allocation
     pub const Resolved = packed struct {
         mem_props: vk.MemoryPropertyFlags,
         mem_reqs: vk.MemoryRequirements,
         general_flags: GeneralFlags,
+        resource_type: ResourceLayoutType,
     };
+
     /// Directly force an allocation to be for memory with
     /// the specified properties
     /// This will be prioritized over any other settings
@@ -149,6 +149,13 @@ pub const AllocationConfig = packed struct {
         Image: vk.Image,
     } = null,
 
+    /// Whether or not the allocation is expected to be used 
+    /// Defaults to null in which case the resource should be explicitly specified
+    /// Unfortunately, vulkan has very specific requirements on how memory between buffers
+    /// and images ought to be laid out so the allocator will need at least some knowledge of 
+    /// what the allocation will actually be used for.
+    resource_type: ?ResourceLayoutType = null,
+
     /// Structure hints
     /// This controls whether or not to use a structured memory pool
     /// based on given parameters
@@ -168,11 +175,6 @@ pub const AllocationConfig = packed struct {
     }
 };
 
-const Allocation = common.Handle(AllocationData, .{
-    .partition_bit = 12,
-});
-
-const ReifiedAllocation = Allocation.Reified;
 
 /// Manages top-level handles to instantiated
 /// heap allocations for all included memory types
@@ -214,6 +216,10 @@ pub const VirtualAllocator = struct {
         };
     }
 
+    /// Retrieves or creates a bookkeeping entry 
+    /// to a given vulkan pool with specific properties (caller must provide pool)
+    pub fn bind(self: *VirtualAllocator, pool: *VulkanPool) Error!void {
+    }
 
     /// NOTE: This allocator doesn't support best fit re-indexing, 
     /// that happens at a higher level.
