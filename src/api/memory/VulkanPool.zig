@@ -48,15 +48,6 @@ const linear_index_size: usize = 8;
 // can in fact be determined entirely at compile time using just system
 // parameters for word sizes and a bit of heuristics...
 // NOTE: FUTURE ME
-const LinearControlBlock = struct {
-    free_list: std.SegmentedList(AllocationData, linear_index_size),
-    size_mapping: std.IntegerBitSet(usize),
-};
-
-const ExponentControlBlock = std.SegmentedList(
-    DeviceMemoryBlock, 
-    exp_index_size,
-);
 
 const Pool = @This();
 
