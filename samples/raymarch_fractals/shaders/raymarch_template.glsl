@@ -26,6 +26,7 @@ layout(binding = 0) uniform FragUniforms {
 const vec2 mouse = vec2(0, 0);
 
 
+// boll circle
 float scene(in vec3 pos) {
     return length(pos) - 0.5;
 }
