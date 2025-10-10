@@ -37,6 +37,7 @@ const PresentQueue = api.PresentQueue;
 const UniformBuffer = api.ComptimeUniformBuffer;
 const StorageBuffer = api.ComptimeStorageBuffer;
 const Image = api.Image;
+const Texture = api.TexImage;
 const Compute = api.Compute;
 
 const log = std.log.scoped(.application);
@@ -68,12 +69,14 @@ const GPUState = struct {
 
     // compute and graphics visible
     uniforms: UniformBuffer(ApplicationUniforms),
+    texture: Texture,
 
     // compute and graphics visible (needs viewport quad)
     // written to in the compute shader and simply mapped to the viewport
 
     pub fn deinit(self: *GPUState) void {
         self.uniforms.deinit();
+        self.texture.deinit();
     }
 };
 
@@ -131,10 +134,18 @@ const SampleState = struct {
         defer frag_shader.deinit();
 
         const size = self.window.dimensions();
+
+        // do the texture
+        self.gpu_state.texture = try Texture.fromFile(
+            self.ctx,
+            self.allocator,
+            "textures/clear.png",
+        );
+
         // initialize uniforms
         self.gpu_state.host_uniforms = .{
             .time = 0,
-            .transform = math.Mat4.identity(),
+            .transform = math.Mat4.scale(math.vec(.{ 20.0, 1.0, 1.0 })),
             .resolution = math.vec(.{ 1.0, 1.0 }),
             .aspect = @as(f32, @floatFromInt(size.height)) / @as(f32, @floatFromInt(size.width)),
         };
@@ -145,10 +156,16 @@ const SampleState = struct {
         try self.gpu_state.uniforms.setData(&self.gpu_state.host_uniforms);
 
         // create fragment-specific descriptors
-        self.graphics.descriptor = try Descriptor.init(self.ctx, self.allocator, .{ .bindings = &.{.{
+        self.graphics.descriptor = try Descriptor.init(self.ctx, self.allocator, .{ .bindings = &.{ .{
             .data = .{ .Uniform = self.gpu_state.uniforms.buffer() },
             .stages = .{ .fragment_bit = true },
-        }} });
+        }, .{
+            .data = .{ .Sampler = .{
+                .sampler = self.gpu_state.texture.h_sampler,
+                .view = self.gpu_state.texture.view.h_view,
+            } },
+            .stages = .{ .fragment_bit = true },
+        } } });
 
         try self.graphics.render_quad.initSelf(self.ctx, self.allocator, .{
             .frag_shader = &frag_shader,
@@ -229,11 +246,12 @@ const SampleState = struct {
 };
 
 pub fn main() !void {
-    const mem = try std.heap.page_allocator.alloc(u8, 1_000_024);
-    var buf_alloc = FixedBufferAllocator.init(mem);
-    defer std.heap.page_allocator.free(mem);
+    var buf_alloc = std.heap.GeneralPurposeAllocator(.{
+    }).init;
+    defer _ = buf_alloc.deinit();
 
     var args = try std.process.argsWithAllocator(buf_alloc.allocator());
+    defer args.deinit();
     _ = args.next();
 
     const shader_file = args.next() orelse {
@@ -247,9 +265,10 @@ pub fn main() !void {
 
     // figure out the full path
     var path_builder = std.ArrayList(u8).init(buf_alloc.allocator());
+    defer path_builder.deinit();
+
     try path_builder.appendSlice("raymarch_fractals/shaders/");
     try path_builder.appendSlice(shader_file);
-    std.debug.print("Full path: {s}\n", .{path_builder.items});
 
     try state.createContext();
     try state.createSyncObjects();

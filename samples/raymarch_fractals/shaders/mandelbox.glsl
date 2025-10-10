@@ -23,63 +23,12 @@ layout(binding = 0) uniform FragUniforms {
     float aspect;
 } u;
 
-layout(binding = 1) uniform sampler2D main_tex;
-
 const vec2 mouse = vec2(0, 0);
 
-float sdfSubtract(float d1, float d2) {
-    return max(-d2, d1);
-}
 
-float sdfSmoothUnion(float d1, float d2, float r) {
-    float h = clamp( 0.5 + 0.5*(d2-d1)/r, 0.0, 1.0 );
-    return mix( d2, d1, h ) - r*h*(1.0-h);
-}
-
-float sdfSmooth(float d, float r) {
-    return d - r;
-}
-
-vec3 sdfMirrorZ(vec3 pos, float offset) {
-    return vec3(pos.xy, abs(pos.z - offset));
-}
-
-float cylinder(vec3 p, float h, float r) {
-  vec2 d = abs(vec2(length(p.xz),p.y)) - vec2(r,h);
-  return min(max(d.x,d.y),0.0) + length(max(d,0.0));
-}
-
-float sphere(vec3 p, vec3 sp, float r) {
-    return length(p - sp) - r;
-}
-
-
-float horns(vec3 pos) {
-    vec3 p = pos - vec3(0.0, 0.96, 0.0);
-    const float rad = 0.2;
-
-    vec2 wut = vec2(length(p.yz) - 1.0, p.x);
-    float donut = length(wut) - rad;
-    
-    float mid = sphere(pos, vec3(0.0, 1.9, 0.0), 0.6);
-    
-    return sdfSubtract(donut, mid);
-}
-
-
-
-float body(vec3 pos) {
-    return 0.0;
-}
-
-
-
+// boll circle
 float scene(in vec3 pos) {
-    float head_base = sdfSmooth(cylinder(pos, 0.4,0.5), 0.5);
-    float eye = sphere(sdfMirrorZ(pos, 0.0), vec3(0.75, 0.0, 0.4), 0.3);
-    
-    return sdfSmoothUnion( horns(pos), sdfSubtract(head_base, eye), 0.2);
-    //return horns(pos);
+    return length(pos) - 0.5;
 }
 
 
@@ -122,15 +71,8 @@ vec3 render(float dist, vec3 pos) {
     #endif
     
     float dif = 0.9 * clamp(dot(light, n), 0.0, 1.0);
-
-    float dotx = abs(dot(n, vec3(1.0, 0.0, 0.0)));
-    float doty = abs(dot(n, vec3(0.0, 1.0, 0.0)));
-    float dotz = abs(dot(n, vec3(0.0, 0.0, 1.0)));
     
-    vec3 albedo = 
-        texture(main_tex, normalize(pos.yz) + vec2(0.5)).rgb * dotx +
-        texture(main_tex, normalize(pos.xz) + vec2(0.5)).rgb * doty +
-        texture(main_tex, normalize(pos.xy) + vec2(0.5)).rgb * dotz;
+    vec3 albedo = vec3(1.0);
     vec3 ambient = vec3(0.1);
     return albedo * dif + ambient;
 }

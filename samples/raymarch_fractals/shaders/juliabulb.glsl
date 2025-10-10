@@ -24,7 +24,7 @@ layout(binding = 0) uniform FragUniforms {
 
 const vec2 mouse = vec2(0, 0);
 
-const int fractal_iterations = 12;
+const int fractal_iterations = 4;
 const float yeet = 4.0;
 const float power = 8.0;
 
@@ -33,6 +33,7 @@ vec4 freakyFractal(in vec3 pos) {
     float r;
     vec3 o = vec3(1.0);
     vec3 z = pos;
+    vec3 c = vec3(sin(TIME), 1.0 - cos(TIME), cos(TIME));
 
     for (int i = 0; i < fractal_iterations; i++) {
         r = length(z);
@@ -40,25 +41,21 @@ vec4 freakyFractal(in vec3 pos) {
 
         if (r > yeet) break;
 
-        float theta = acos(z.z / r);
-        float phi   = atan(z.y, z.x);
+        float theta = 8.0 *acos(clamp(z.z / r, -1.0, 1.0));
+        float phi   = 8.0 * atan(z.y, z.x);
 
-        dr = pow(r, power - 1) * power * dr + 1.0;
+        dr = power * pow(r, 3.5) * dr;
 
         float scaled_r = pow(r, power);
-        theta = theta * power;
-        phi   = phi   * power;
 
         z = scaled_r * vec3(
             sin(theta) * cos(phi), 
             sin(phi) * sin(theta), 
             cos(theta)
-        ) + pos;
-
-        z.y = clamp(z.y, -1.0, 1.0);
+        ) + c;
     }
 
-    return vec4(0.5 * log(r) * r / max(dr, 1e-6), abs(normalize(o)));
+    return vec4(0.5 * log(r) * sqrt(r) / max(dr, 1e-6), abs(normalize(o)));
 }
 
 const vec3 spos = vec3(0.0);
@@ -119,15 +116,13 @@ const vec3 sky_c = vec3(0.2, 0.2, 0.4);
 // Basic ass phong lighting, replace with something fancier
 // if you wish
 vec3 render(float dist, vec3 pos, vec3 look, vec3 dir, vec3 light) {
+	vec3 light1 = vec3(  0.577, 0.577, -0.577 );
+
     if (dist > MAX_DIST) 
     {
-        float sky = pow(dot(dir, vec3(0.0, 1.0, 0.0)), 2.0);
-        float sky2 = pow(dot(dir, vec3(0.0, -1.0, 0.0)), 2.0);
-
-        vec3 sky_a = max(mix(sky_a, sky_b, sky), vec3(0.0));
-        vec3 sky_b = max(mix(sky_a, sky_c, sky2), vec3(0.0));
-
-        return sky_a + sky_b;
+     	vec3 col = 1.3*vec3(0.8,.95,1.0)*(0.7+0.3*dir.y);
+		col += vec3(0.8,0.7,0.5)*pow( clamp(dot(dir,light1),0.0,1.0), 32.0 );
+        return col;
     }
     
     vec3 n = calcNormals(pos);
@@ -145,8 +140,8 @@ vec3 render(float dist, vec3 pos, vec3 look, vec3 dir, vec3 light) {
     float dif = max(dot(n, light), 0.0);
 
 
-    float shine = 32.0;
-    vec3 halfa  = normalize(light + look);
+    float shine = 64.0;
+    vec3  halfa = normalize(light + look);
     float spa   = max(dot(halfa, n), 0.0);
     float spec  = pow(spa, shine);
 

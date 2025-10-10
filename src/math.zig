@@ -369,4 +369,13 @@ pub const Mat4 = extern struct {
 
         return true;
     }
+
+    pub fn scale(by: Vec3) Mat4 {
+        return create(.{
+            .{by.x, 0, 0, 0},
+            .{0, by.y, 0, 0},
+            .{0, 0, by.z, 0},
+            .{0, 0, 0, 1.0},
+        });
+    }
 };
