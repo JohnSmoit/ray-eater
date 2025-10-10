@@ -17,11 +17,9 @@ dev: *const DeviceHandler,
 pub fn init(ctx: *const Context, dimensions: vk.Extent2D) !Self {
     const dev: *const DeviceHandler = ctx.env(.dev);
     log.debug("Chosen depth format: {s}", .{@tagName(try dev.findDepthFormat())});
-    const image = try Image.init(ctx, &.{
+    const image = try Image.init(ctx, .{
         .format = try dev.findDepthFormat(),
-        .height = dimensions.height,
-        .width = dimensions.width,
-
+        .extent = dimensions,
         .mem_flags = .{ .device_local_bit = true },
         .tiling = .optimal,
         .usage = .{ .depth_stencil_attachment_bit = true },

@@ -19,4 +19,8 @@ jobs:
     - name: build
       run: zig build
 
+    - name: test
+      run: zig build run-tests
+
     # TODO: Run unit tests, and optionally samples
+
