@@ -1,6 +1,6 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const util = @import("../util.zig");
+const util = @import("common").util;
 const base = @import("base.zig");
 
 const Context = @import("../context.zig");
@@ -142,14 +142,17 @@ pub fn init(
     allocator: Allocator,
     config: Config,
 ) !Self {
-    // TODO: Swapchain support details should probably lie within the Surface type
-    // instead of the device since these details mostly concern properties of the chosen
-    // draw surface.
+    // The swapchain should NEVER be initialized
+    // without surface support, though this implementation
+    // is a bit spaghetti
     const device: *const DeviceHandler = ctx.env(.dev);
     const pr_dev: *const vk.DeviceProxy = ctx.env(.di);
     const surface: *const SurfaceHandler = ctx.env(.surf);
 
-    const details: *const DeviceHandler.SwapchainSupportDetails = &device.swapchain_details;
+    if (device.swapchain_details == null)
+        @panic("Cannot initialize swapchain without surface support");
+
+    const details: *const DeviceHandler.SwapchainSupportDetails = &device.swapchain_details.?;
 
     // request an appropriate number of swapchain images
     var image_count: u32 = details.capabilities.min_image_count + 1;

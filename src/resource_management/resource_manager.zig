@@ -4,11 +4,9 @@ const Self = @This();
 const common = @import("common");
 const Registry = @import("registry.zig");
 
-const PoolAllocator = @import("pool_allocator.zig");
 const Allocator = std.mem.Allocator;
 
 const TypeId = common.TypeId;
-const MemoryPoolsTable = std.AutoHashMap(TypeId, PoolAllocator);
 
 const Handle = common.Handle;
 const OpaqueHandle = common.OpaqueHandle;
@@ -19,34 +17,36 @@ pub const Config = struct {
     pool_sizes: usize,
 };
 
-pools: MemoryPoolsTable,
+// pools: MemoryPoolsTable,
 
 pub fn init(config: Config, registry: *Registry) !Self {
+    _ = config;
+    _ = registry;
+
+    return undefined;
     // loop through each API registry entry
     // and initialize the table with a pool for each entry
     // whose management strategy is tagged as "Pooled"
+   // var entries_iter = registry.select();
+   // var entries = entries_iter
+   //     .where(Predicate.ManagementModeIs(.Pooled))
+   //     .iterator();
 
-    var entries_iter = registry.select();
-    var entries = entries_iter
-        .where(Predicate.ManagementModeIs(.Pooled))
-        .iterator();
+   // var table = MemoryPoolsTable.init(config.allocator);
 
-    var table = MemoryPoolsTable.init(config.allocator);
+   // while (entries.next()) |entry| {
+   //     const pool_config = PoolAllocator.Config{
+   //         .elem_size = entry.size_bytes,
+   //         .elem_count = config.pool_sizes,
+   //     };
 
-    while (entries.next()) |entry| {
-        std.debug.print("Creating pool for type {s}\n", .{entry.type_name});
-        const pool_config = PoolAllocator.Config{
-            .elem_size = entry.size_bytes,
-            .elem_count = config.pool_sizes,
-        };
+   //     try table.put(
+   //         entry.type_id,
+   //         try PoolAllocator.initAlloc(config.allocator, pool_config),
+   //     );
+   // }
 
-        try table.put(
-            entry.type_id,
-            try PoolAllocator.initAlloc(config.allocator, pool_config),
-        );
-    }
-
-    return Self{
-        .pools = table,
-    };
+   // return Self{
+   //     .pools = table,
+   // };
 }

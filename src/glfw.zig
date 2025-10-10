@@ -35,11 +35,13 @@ fn ErrorOnFalse(comptime func: fn () callconv(.c) c_int, comptime err: anytype) 
     return wrapperType.wrapper;
 }
 
-pub extern fn glfwGetInstanceProcAddress(instance: vk.Instance, name: [*:0]const u8) vk.PfnVoidFunction;
-pub extern fn glfwCreateWindowSurface(instance: vk.Instance, window: *GLFWwindow, allocation_callbacks: ?*const vk.AllocationCallbacks, surface: *vk.SurfaceKHR) vk.Result;
+extern fn glfwGetInstanceProcAddress(instance: vk.Instance, name: [*:0]const u8) vk.PfnVoidFunction;
+extern fn glfwCreateWindowSurface(instance: vk.Instance, window: *GLFWwindow, allocation_callbacks: ?*const vk.AllocationCallbacks, surface: *vk.SurfaceKHR) vk.Result;
+
+pub const getInstanceProcAddress = glfwGetInstanceProcAddress;
 
 pub const init = ErrorOnFalse(c.glfwInit, error.GLFWInitFailed);
-pub const terminate = c.glfwTerminate;
+pub const deinit = c.glfwTerminate;
 pub const vulkanSupported = ErrorOnFalse(c.glfwVulkanSupported, error.VulkanUnsupported);
 pub const getRequiredInstanceExtensions = c.glfwGetRequiredInstanceExtensions;
 pub const getFramebufferSize = c.glfwGetFramebufferSize;

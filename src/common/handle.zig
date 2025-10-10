@@ -1,71 +1,106 @@
 const std = @import("std");
 const common = @import("common.zig");
 
+// const ct = common.ct;
+
 const AnyPtr = common.AnyPtr;
 
-pub const HandleType = enum {
-    Single,
-    Multi,
-};
-/// generic type-erased handle
-/// contains the minimal amount of data required to work, but no higher-level functionality
-/// To ensure safety, don't initialize these from scratch,
-pub const OpaqueHandle = struct {
-    // value is always treated in a type-erased manner,
-    // gets and sets, as well as wrapped API functions will cast this as the appropriate
-    // type
-    // This is sort of not safe, so I'll provide debug functionality to ensure that handles
-    // are valid whenever they're acquired.
-    value: AnyPtr,
+pub const Config = struct {
+    index_bits: usize = 32,
+    gen_bits: usize = 32,
 
-    type_data: union(HandleType) {
-        Single,
-        Multi: usize,
-    },
+    partition_bit: ?usize = null,
 };
 
-const assert = std.debug.assert;
-
-/// Typed handle, with support for derefrence
-pub fn Handle(comptime T: type) type {
-    return struct {
-        const Self = @This();
-        base: OpaqueHandle,
-
-        // TODO: Implement this so that you can't just pass any opaque handle --
-        // It needs to be guarunteed that the handle bound is of a compatible type
-        // -- TO do that, I'll need to implement at least some of the type-scoped allocators
-        // first
-        pub fn bindOpaque(self: *Self, new: OpaqueHandle) void {
-            assert(self.base.value.id == new.value.id);
-            self.base = new;
-        }
-
-        // these are ease-of-use pseudo-dereference operators
-        pub fn get(self: *const Self) *const T {
-            assert(self.base.type_data == .Single);
-            return self.base.value.get(T);
-        }
-
-        pub fn getMut(self: *Self) *T {
-            assert(self.base.type_data == .Single);
-            return self.base.value.get(T);
-        }
-
-        pub fn getMulti(self: *const Self) []const T {
-            assert(self.base.type_data == .Multi);
-            return @as(
-                [*]const T,
-                @ptrCast(self.base.value.get(T)),
-            )[0..self.base.type_data.Multi];
-        }
-
-        pub fn getMultiMut(self: *Self) []T {
-            assert(self.base.type_data == .Multi);
-            return @as(
-                [*]T,
-                @ptrCast(self.base.value.get(T)),
-            )[0..self.base.type_data.Multi];
-        }
-    };
+fn PartitionIndexType(index_bits: usize, partition: usize) type {
+    return if (partition == 0) 
+        std.meta.Int(.unsigned, index_bits)
+    else
+        packed struct {
+            lhs: std.meta.Int(.unsigned, partition),
+            rhs: std.meta.Int(.unsigned, index_bits - partition),
+        };
 }
+
+
+pub fn Handle(
+    comptime T: type,
+    comptime config: Config,
+) type {
+    const partition_bit = config.partition_bit orelse 0;
+
+    if (config.index_bits > 64) 
+        @compileError(
+            "index_bits (" ++ 
+            config.index_bits ++ 
+            ") must be within the range of <=64");
+
+    if (partition_bit > config.index_bits) 
+        @compileError("index bit partition must lie within the range of index bits");
+
+    const IndexType =  PartitionIndexType(config.index_bits, partition_bit);
+
+    if (config.gen_bits == 0) {
+        return packed struct {
+            const Self = @This();
+            const Type = T;
+
+            pub fn Reified(err: type, getter: *const fn (*anyopaque, Self) err!*T) type {
+                return packed struct {
+                    h: Self,
+                    p: *anyopaque,
+
+                    pub fn get(self: @This()) err!*T {
+                        return getter(self.p, self.h);
+                    }
+
+                    pub fn init(h: Self, mem: *anyopaque) @This() {
+                        return .{
+                            .h = h,
+                            .p = mem,
+                        };
+                    }
+                };
+            } 
+
+            index: IndexType,
+
+        };
+    }
+    else {
+        // gen is included only if we want a generation counter
+        const GenType = std.meta.Int(.unsigned, config.gen_bits);
+
+        return packed struct {
+            const Type = T;
+            const Self = @This();
+
+            /// Uhh duplicate im lazy
+            pub fn Reified(err: type, getter: *const fn (*anyopaque, Self) err!*T) type {
+                return packed struct {
+                    h: Self,
+                    p: *anyopaque,
+
+                    pub fn get(self: @This()) err!*T {
+                        return getter(self.p, self.h);
+                    }
+
+                    pub fn init(h: Self, mem: *anyopaque) @This() {
+                        return .{
+                            .h = h,
+                            .p = mem,
+                        };
+                    }
+                };
+            } 
+
+
+            gen: GenType,
+            index: IndexType,
+        };
+    }
+}
+
+
+pub const OpaqueHandle = packed struct {
+};

@@ -1,7 +1,7 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const api = @import("api.zig");
-const util = @import("../util.zig");
+const util = @import("common").util;
 
 const DeviceInterface = api.DeviceInterface;
 const ShaderModule = api.ShaderModule;

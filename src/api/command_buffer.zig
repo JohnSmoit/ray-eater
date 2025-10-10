@@ -2,7 +2,7 @@ const std = @import("std");
 const api = @import("api.zig");
 const vk = @import("vulkan");
 const base = @import("base.zig");
-const util = @import("../util.zig");
+const util = @import("common").util;
 const queue = @import("queue.zig");
 
 const Context = @import("../context.zig");
@@ -150,7 +150,7 @@ pub fn addEntries(reg: *Registry) !void {
 }
 
 pub const CommandBufferProxy = struct {
-    const CommandBufferHandle = common.Handle(CommandBuffer);
+    const CommandBufferHandle = common.Handle(CommandBuffer, .{});
 
     handle: CommandBufferHandle,
 
