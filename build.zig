@@ -96,16 +96,34 @@ fn buildLibrary(
 
 const SampleEntry = struct {
     name: []const u8,
-    path: []const u8,
+    desc: []const u8,
+    path: []const u8 = "(no description)",
 
     // these get populated later
     mod: *Module = undefined,
     exe: *Compile = undefined,
 };
 var sample_files = [_]SampleEntry{
-    .{ .name = "basic_planes", .path = "basic_planes.zig" },
-    .{ .name = "compute_drawing", .path = "compute_drawing/main.zig" },
-    .{ .name = "test_sample", .path = "test_sample.zig" },
+    .{
+        .name = "basic_planes",
+        .path = "basic_planes.zig",
+        .desc = "basic showcase of bootstrapping vulkan up to 3d rendering",
+    },
+    .{
+        .name = "compute_drawing",
+        .path = "compute_drawing/main.zig",
+        .desc = "drawing using compute shaders",
+    },
+    .{
+        .name = "test_sample",
+        .path = "test_sample.zig",
+        .desc = "test to see if the sample build steps work correctly",
+    },
+    .{
+        .name = "raymarch_fractals",
+        .path = "raymarch_fractals/main.zig",
+        .desc = "pick from a selection of raymarched fractals, all programmed within fragment shaders",
+    },
 };
 
 fn populateSampleModules(
@@ -160,29 +178,21 @@ fn buildSamples(
 ) void {
     populateSampleModules(b, lib_mod, deps, opts);
 
-    const build_sample = b.option(
-        []const u8,
-        "sample",
-        "specify sample to build and run",
-    );
-    if (build_sample) |sample_name| {
-        var entry: ?*SampleEntry = null;
+    for (sample_files) |entry| {
+        b.installArtifact(entry.exe);
 
-        for (&sample_files) |*f| {
-            if (std.mem.order(u8, sample_name, f.name) == .eq) {
-                entry = f;
-                break;
-            }
-        }
+        const run_step = b.addRunArtifact(entry.exe);
+        run_step.addArgs(b.args orelse &.{});
 
-        if (entry == null) return;
-
-        b.installArtifact(entry.?.exe);
-
-        const run_step = b.addRunArtifact(entry.?.exe);
         run_step.step.dependOn(b.getInstallStep());
 
-        const run_cmd = b.step("run", "run a sample executable");
+        const step_name = std.fmt.allocPrint(
+            b.allocator,
+            "run-{s}",
+            .{entry.name},
+        ) catch @panic("Achievement Get: How did we get here?");
+
+        const run_cmd = b.step(step_name, entry.desc);
         run_cmd.dependOn(&run_step.step);
     }
 }

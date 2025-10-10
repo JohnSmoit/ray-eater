@@ -1,6 +1,7 @@
 const std = @import("std");
 const ray = @import("ray");
 const api = ray.api;
+const math = ray.math;
 
 const Allocator = std.mem.Allocator;
 
