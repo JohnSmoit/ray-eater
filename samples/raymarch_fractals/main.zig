@@ -139,7 +139,7 @@ const SampleState = struct {
         self.gpu_state.texture = try Texture.fromFile(
             self.ctx,
             self.allocator,
-            "textures/clear.png",
+            "textures/mannull.png",
         );
 
         // initialize uniforms
