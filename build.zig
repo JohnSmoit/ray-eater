@@ -105,22 +105,22 @@ const SampleEntry = struct {
 };
 var sample_files = [_]SampleEntry{
     .{
-        .name = "basic_planes",
+        .name = "basic-planes",
         .path = "basic_planes.zig",
         .desc = "basic showcase of bootstrapping vulkan up to 3d rendering",
     },
     .{
-        .name = "compute_drawing",
+        .name = "compute-drawing",
         .path = "compute_drawing/main.zig",
         .desc = "drawing using compute shaders",
     },
     .{
-        .name = "test_sample",
+        .name = "test-sample",
         .path = "test_sample.zig",
         .desc = "test to see if the sample build steps work correctly",
     },
     .{
-        .name = "raymarch_fractals",
+        .name = "raymarch-fractals",
         .path = "raymarch_fractals/main.zig",
         .desc = "pick from a selection of raymarched fractals, all programmed within fragment shaders",
     },

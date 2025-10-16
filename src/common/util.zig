@@ -1,5 +1,5 @@
 //! TODO: Merge this into the common directory
-//! Most of this is completely unused and useless, so 
+//! Most of this is completely unused and useless, so
 //! only a bit of this iwll be included...
 const std = @import("std");
 const builtin = @import("builtin");
@@ -19,11 +19,11 @@ pub fn asManyPtr(comptime T: type, ptr: *const T) [*]const T {
 
 //FIXME: This is due for a BIG REFACTOR COMING SOON
 // (because it is much worse than just &.{} which I Didn't know was a thing oops.
-// funilly enough, &.{1, 2, 3} is shorter than span(.{1, 2, 3}). I just don't 
+// funilly enough, &.{1, 2, 3} is shorter than span(.{1, 2, 3}). I just don't
 // like reading docs + idk how.
-pub fn span(v: anytype) [] @TypeOf(v[0]) {
+pub fn span(v: anytype) []@TypeOf(v[0]) {
     const T = @TypeOf(v[0]);
-    comptime var sp: [v.len] T = undefined;
+    comptime var sp: [v.len]T = undefined;
     for (v, 0..) |val, index| {
         sp[index] = val;
     }
@@ -46,12 +46,29 @@ pub fn tryGetField(info: *const StructInfo, name: []const u8) ?*const StructFiel
     return null;
 }
 
+pub fn fnSignatureMatches(
+    comptime A: type,
+    comptime B: type,
+) bool {
+    const info_a = if (@typeInfo(A).@"fn") @typeInfo(A).@"fn" else 
+        return false;
+    const info_b = if (@typeInfo(B).@"fn") @typeInfo(B).@"fn" else 
+        return false;
+
+    if (info_a.params.len != info_b.params.len) return false;
+
+    for (info_a.params, info_b.params) |a, b| {
+        if (!std.meta.eql(a, b)) return false;
+    }
+
+    return true;
+}
+
 /// returns the percentage of a number
 /// should work for all numeric types
 pub fn pct(num: anytype, percentage: @TypeOf(num)) @TypeOf(num) {
     return @divTrunc(num * percentage, 100);
 }
-
 
 const BasicMemUnits = enum(usize) {
     Bytes,
@@ -60,15 +77,10 @@ const BasicMemUnits = enum(usize) {
     Gigabytes,
 };
 
-
 /// Obviously, val should be numerical, but should
 /// otherwise work with integral and floating points,
 /// illegal divisions notwithstanding.
-pub inline fn transformMemUnits(
-    comptime from: BasicMemUnits, 
-    comptime to: BasicMemUnits, 
-    val: anytype
-) @TypeOf(val) {
+pub inline fn transformMemUnits(comptime from: BasicMemUnits, comptime to: BasicMemUnits, val: anytype) @TypeOf(val) {
     const ValueType = @TypeOf(val);
     const info = @typeInfo(ValueType);
 
@@ -82,17 +94,15 @@ pub inline fn transformMemUnits(
         b *= 1024;
     }
 
-
     if (info == .int) {
         return @divFloor(a, b) * val;
     } else {
         const fnum: ValueType = @floatFromInt(a);
         const fden: ValueType = @floatFromInt(b);
 
-        return (fnum / fden) * val; 
+        return (fnum / fden) * val;
     }
 }
-
 
 pub inline fn megabytes(val: anytype) @TypeOf(val) {
     return transformMemUnits(.Megabytes, .Bytes, val);

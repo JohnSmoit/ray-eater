@@ -1,3 +1,0 @@
-//! low-level API factory -- contains initializers
-//! for memory managed API types which are in turn wrappers
-//! to their unmanaged versions...

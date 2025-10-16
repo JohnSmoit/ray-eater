@@ -274,28 +274,3 @@ pub fn EnvSubset(comptime fields: anytype) type {
         },
     });
 }
-
-//BUG: This cannot work since windowless contexts would require
-//a lot more features that I currently support
-// test "windowless context" {
-//     var allocator = std.heap.DebugAllocator(.{
-//         .safety = true,
-//     }).init;
-//     defer {
-//         _ = allocator.detectLeaks();
-//         if (allocator.deinit() != .ok) {
-//             std.debug.print("Oppsies\n", .{});
-//         }
-//     }
-//     try glfw.init();
-//
-//     const extensions = glfw.instanceExtensions();
-//
-//     var ctx = try Self.init(allocator.allocator(), .{
-//         .inst_extensions = extensions,
-//         .loader = glfw.glfwGetInstanceProcAddress,
-//         .management = .{
-//             .allocator = allocator.allocator(),
-//             .pool_sizes = 1024,
-//         },
-//     });

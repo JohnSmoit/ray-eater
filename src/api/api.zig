@@ -77,7 +77,7 @@ pub fn initRegistry(reg: *Registry) !void {
     try CommandBuffer.addEntries(reg);
 }
 
-comptime {
-    _ = @import("memory/allocator.zig");
-    _ = @import("memory/Heap.zig");
-}
+// comptime {
+//     _ = @import("memory/allocator.zig");
+//     _ = @import("memory/Heap.zig");
+// }

@@ -114,8 +114,20 @@ pub fn deinit(self: *const Self) void {
 
 const res = @import("../resource_management/res.zig");
 const common = @import("common");
+const Registry = res.Registry;
 
 pub const CommandBuffer = struct {
+    pub const entry_config =
+        Registry.EntryConfig{
+            .State = CommandBuffer,
+            .Proxy = CommandBufferProxy,
+            .init_errors = CommandBufferInitErrors,
+            .config_type = Config,
+            .management = .Pooled,
+            .initFn = dummyInit,
+            .deinitFn = dummyDeinit,
+        };
+
     h_cmd_buffer: vk.CommandBuffer,
     h_cmd_pool: vk.CommandPool,
 
@@ -123,7 +135,11 @@ pub const CommandBuffer = struct {
     one_shot: bool = false,
 };
 
-const CommandBufferInitErrors = error {
+pub fn addEntries(reg: *Registry) !void {
+    reg.addEntry(CommandBuffer);
+}
+
+const CommandBufferInitErrors = error{
     Something,
 };
 
@@ -137,17 +153,6 @@ fn dummyDeinit(self: *const CommandBuffer) void {
     _ = self;
 }
 
-const Registry = res.Registry;
-pub fn addEntries(reg: *Registry) !void {
-    reg.addEntry(.{
-        .state = CommandBuffer,
-        .proxy = CommandBufferProxy,
-        .init_errors =CommandBufferInitErrors,
-        .config_type = Config,
-        .management = .Pooled,
-        .requires_alloc = false,
-    }, dummyInit, dummyDeinit);
-}
 
 pub const CommandBufferProxy = struct {
     const CommandBufferHandle = common.Handle(CommandBuffer, .{});

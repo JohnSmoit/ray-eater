@@ -5,8 +5,23 @@
 //! This is globally defined and not scoped to an application context
 const std = @import("std");
 
+// this is an example of how api functions should be signatured
+// There are 2 possible signatures, one without an allocator,
+// and the other with it. The expected signature is configured by
+// How the entry is specified in the type registry at compile time.
+// Due to the function pointery nature of this crap, error unions need to be explicitly specified
+// For types that require ad-hoc initializatoin allocations,
+// (This is usually I sign that I messed something up)
+// pub fn exampleInit(
+//     self: *Self,
+//     ctx: *Context,
+//     env: SomeEnvSubset,
+//     config: Config,
+// ) error{bitch}!Self {}
+
 const common = @import("common");
 const Context = @import("../context.zig");
+const cfg = common.config;
 
 const Allocator = std.mem.Allocator;
 const AnyPtr = common.AnyPtr;
@@ -14,12 +29,21 @@ const TypeId = common.TypeId;
 
 const Self = @This();
 
+pub const PfnAddRegistryEntries = *const fn () []EntryConfig;
+
+pub const ManagementMode = enum {
+    Unmanaged,
+    Pooled,
+    Transient,
+    Streamed,
+};
+
 pub const EntryConfig = struct {
     // type for storing data
-    state: type,
+    State: type,
 
     // type for associating and operating on data
-    proxy: type,
+    Proxy: type,
 
     // error set for init functions (omit for anyerror)
     init_errors: ?type,
@@ -27,8 +51,60 @@ pub const EntryConfig = struct {
     // the type of the configuration struct (if any)
     config_type: ?type = null,
     // whether or not initialization depends on an allocator
-    requires_alloc: bool = false,
     management: ManagementMode = .Pooled,
+
+    initFn: *const anyopaque,
+    deinitFn: *const anyopaque,
+};
+
+fn ManagedResourceType(comptime mode: ManagementMode, comptime T: type) type {
+    return switch(mode) {
+        .Pooled => common.
+    };
+}
+
+/// Comptime registry API
+/// In comptime, the types themselves are the registries.
+/// Hopefully, this doesn't slow compilation to a crawl...
+/// The working of this registry API depends on a coherent
+/// naming scheme for faster lookups
+pub const ComptimeAPI = struct {
+
+    // gets the config registry, cuz thats a generic
+    fn ConfigRegistryFor(comptime T: type) type {
+        return if (@hasDecl(T, "Registry")) @TypeOf(T.Registry) else 
+            @compileError("Invalid type " ++ @typeName(T) ++ " (missing config registry)");
+    }
+
+    /// Resolves the handle type from the API type as well as the management mode
+    pub fn ManagedReturnType(comptime T: type) type {
+        const registry = GetRegistry(T) orelse
+            @compileError("Invalid type: " ++ @typeName(T) ++ " (missing type registry)");
+
+        return registry.Proxy;
+    }
+
+    pub fn ResolveConfigRegistry(comptime ConfigType: type) ConfigRegistryFor(ConfigType) {
+        return ConfigType.Registry;
+    }
+
+    pub fn ResolveConfigType(comptime APIType: type) ?type {
+        return if (@hasDecl(APIType, "Config")) APIType.Config else null;
+    }
+
+    pub fn GetRegistry(comptime APIType: type) ?EntryConfig {
+        if (!@hasDecl(APIType, "entry_config")) return null;
+        return APIType.entry_config;
+    }
+
+    pub fn ProxyFor(comptime T: type) type {
+        const entry_config = GetRegistry(T) orelse
+            @compileError("cannot create a proxy for: " ++ @typeName(T) ++ " (no entry config)"); 
+
+        return struct {
+            handle: entry_config.
+        };
+    }
 };
 
 // this returns the meta-information of the registry entry
@@ -38,7 +114,7 @@ pub fn RegistryEntryType(comptime config: EntryConfig) type {
         // remember, these functions should be remapped first arguments to the proxy
         pub const InitFnType = InitFnTemplate(config);
         pub const DeinitFnType = DeinitFnTemplate(config);
-        pub const entry_id = common.typeId(config.state);
+        pub const entry_id = common.typeId(config.State);
     };
 }
 
@@ -50,24 +126,24 @@ fn InitFnTemplate(comptime config: EntryConfig) type {
     const error_type = config.init_errors orelse anyerror;
     if (config.config_type) |ct| {
         if (config.requires_alloc) {
-            return *const fn (*config.state, *const Context, Allocator, ct) error_type!void;
+            return *const fn (*config.State, *const Context, Allocator, ct) error_type!void;
         } else {
-            return *const fn (*config.state, *const Context, ct) error_type!void;
+            return *const fn (*config.State, *const Context, ct) error_type!void;
         }
     } else {
         if (config.requires_alloc) {
-            return *const fn (*config.state, *const Context, Allocator) error_type!void;
+            return *const fn (*config.State, *const Context, Allocator) error_type!void;
         } else {
-            return *const fn (*config.state, *const Context) error_type!void;
+            return *const fn (*config.State, *const Context) error_type!void;
         }
     }
 }
 
 fn DeinitFnTemplate(comptime config: EntryConfig) type {
     return if (config.requires_alloc)
-        (*const fn (*config.state, Allocator) void)
+        (*const fn (*config.State, Allocator) void)
     else
-        (*const fn (*config.state) void);
+        (*const fn (*config.State) void);
 }
 
 pub const RegistryEntry = struct {
@@ -75,46 +151,59 @@ pub const RegistryEntry = struct {
     type_name: []const u8,
     size_bytes: usize,
 
-    initFn: AnyPtr,
-    deinitFn: AnyPtr,
+    initFn: *const anyopaque,
+    deinitFn: *const anyopaque,
 
     management: ManagementMode,
 };
 
-pub const ManagementMode = enum {
-    Unmanaged,
-    Pooled,
-    SomeThirdThing,
-};
-
 entries: std.ArrayList(RegistryEntry),
+typeid_index: std.AutoHashMap(TypeId, *const RegistryEntry),
 
 pub fn init(allocator: Allocator) !Self {
     return .{
         .entries = std.ArrayList(RegistryEntry).init(allocator),
+        .typeid_index = std.AutoHashMap(TypeId, *const RegistryEntry).init(allocator),
     };
 }
 
+/// the type referenced by "T" must match the shape of
+/// a configurable type as defined in the "CRAPI" 
+/// type specification
 pub fn addEntry(
     self: *Self,
-    comptime config: EntryConfig,
-    comptime initFn: InitFnTemplate(config),
-    comptime deinitFn: DeinitFnTemplate(config),
+    comptime T: type,
 ) void {
-    const EntryType = RegistryEntryType(config);
+    const entry_config = ComptimeAPI.GetRegistry(T) orelse 
+        @compileError("cannot create a registry entry for type: " ++ @typeName(T) ++ " (no entry config)");
 
     const entry = RegistryEntry{
-        .initFn = AnyPtr.fromDirect(EntryType.InitFnType, initFn),
-        .deinitFn = AnyPtr.fromDirect(EntryType.DeinitFnType, deinitFn),
+        .initFn = entry_config.initFn,
+        .deinitFn = entry_config.deinitFn,
 
-        .type_id = common.typeId(config.state),
-        .type_name = @typeName(config.state),
-        .management = config.management,
-        .size_bytes = @sizeOf(config.state),
+        .type_id = common.typeId(entry_config.State),
+        .type_name = @typeName(entry_config.State),
+        .management = entry_config.management,
+        .size_bytes = @sizeOf(entry_config.State),
     };
-    
+
     // If the type registry fails to build, there is literally nothing to be done about it.
-    self.entries.append(entry) catch @panic("Failed to build type registry due to an allocation error!");
+    // Probably shouldn't just panic tho :(
+    self.entries.append(entry) catch
+        @panic("Failed to build type registry due to an allocation error!");
+
+    self.typeid_index.put(
+        common.typeId(entry_config.State),
+        &self.entries.items[self.entries.items.len - 1],
+    ) catch
+        @panic("Failed to build type registry due to being out of memory");
+}
+
+pub fn getEntry(
+    self: *const Self,
+    id: TypeId,
+) ?*const RegistryEntry {
+    return self.typeid_index.get(id);
 }
 
 pub const PredicateFn = *const fn (*const RegistryEntry) bool;
@@ -167,13 +256,12 @@ pub const Query = struct {
                 !self.matches(&self.entries[self.index])) : (self.index += 1)
             {}
 
-            if (self.index < self.entries.len){
-                const tmp =  &self.entries[self.index];
+            if (self.index < self.entries.len) {
+                const tmp = &self.entries[self.index];
                 self.index += 1;
 
                 return tmp;
-            }
-            else {
+            } else {
                 return null;
             }
         }
