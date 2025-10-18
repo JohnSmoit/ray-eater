@@ -9,7 +9,7 @@ const RefConfig = struct {
 };
 
 fn ResolveInnerType(comptime T: type, comptime config: RefConfig) type {
-     const AsPtr = if (!config.mutable) *const T else *T;
+    const AsPtr = if (!config.mutable) *const T else *T;
 
     return if (@typeInfo(T) == .pointer) T else AsPtr;
 }
@@ -126,6 +126,17 @@ fn findParentFieldType(pt: type, fname: []const u8) type {
     unreachable;
 }
 
+pub fn Empty() type {
+    return struct {
+        const Self = @This();
+        pub fn populate(ctx: anytype) Self {
+            _ = ctx;
+            return .{};
+        }
+
+    };
+}
+
 pub fn For(comptime T: type) type {
     validateType(T);
 
@@ -133,6 +144,51 @@ pub fn For(comptime T: type) type {
         pub const ContextEnum = ContextEnumFromFields(T);
         const Bindings = MakeRefBindings(T);
         const Self = @This();
+
+        /// Defines an env subset type which can be automatically populated by a factory
+        pub fn EnvSubset(comptime fields: anytype) type {
+            const Declaration = std.builtin.Type.Declaration;
+
+            comptime var field_infos: []const StructField = &.{};
+            for (fields) |enum_lit| {
+                const matching_field = std.meta.fieldInfo(T, enum_lit);
+                const MatchingFieldType = matching_field.type;
+
+                // This is janky due to how the env system mapps fields oops
+                const mapped_field_info = StructField{
+                    .default_value_ptr = null,
+                    .type = MatchingFieldType.InnerType,
+                    .is_comptime = false,
+                    .alignment = @alignOf(MatchingFieldType.InnerType),
+                    .name = matching_field.name,
+                };
+                field_infos = field_infos ++ [1]StructField{mapped_field_info};
+            }
+
+            const populate_decl = Declaration{ .name = "populate" };
+
+            const SubsetType = @Type(.{
+                .@"struct" = .{
+                    .fields = field_infos,
+                    .decls = &.{populate_decl},
+                    .layout = .auto,
+                    .is_tuple = false,
+                },
+            });
+
+            const Populate = struct {
+                pub fn populate(ctx: anytype) SubsetType {
+                    var new: SubsetType = undefined;
+                    inline for (field_infos) |fld| {
+                        @field(new, fld.name) = @field(ctx, fld.name);
+                    }
+                }
+            };
+
+            SubsetType.populate = Populate.populate;
+
+            return SubsetType;
+        }
 
         inner: T,
 

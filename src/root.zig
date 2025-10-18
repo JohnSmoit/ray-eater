@@ -17,6 +17,7 @@ pub const testing = @import("tests/testing.zig");
 // imports for testing
 comptime {
     _ = @import("resource_management/registry.zig");
+    _ = @import("resource_management/res.zig");
     _ = @import("context.zig");
     _ = @import("api/api.zig");
 }

@@ -22,6 +22,7 @@ const std = @import("std");
 const common = @import("common");
 const Context = @import("../context.zig");
 const cfg = common.config;
+const env = @import("../env.zig");
 
 const Allocator = std.mem.Allocator;
 const AnyPtr = common.AnyPtr;
@@ -46,10 +47,10 @@ pub const EntryConfig = struct {
     Proxy: type,
 
     // error set for init functions (omit for anyerror)
-    init_errors: ?type,
+    InitErrors: type = error{},
 
     // the type of the configuration struct (if any)
-    config_type: ?type = null,
+    ConfigType: type = struct{},
     // whether or not initialization depends on an allocator
     management: ManagementMode = .Pooled,
 
@@ -57,9 +58,14 @@ pub const EntryConfig = struct {
     deinitFn: *const anyopaque,
 };
 
+const ObjectPool = common.ObjectPool;
+
 fn ManagedResourceType(comptime mode: ManagementMode, comptime T: type) type {
+    const PoolType = ObjectPool(T, .{});
     return switch(mode) {
-        .Pooled => common.
+        .Pooled => PoolType.ReifiedHandle,
+        .Streamed => PoolType.ReifiedHandle,
+        else => *T,
     };
 }
 
@@ -88,22 +94,25 @@ pub const ComptimeAPI = struct {
         return ConfigType.Registry;
     }
 
-    pub fn ResolveConfigType(comptime APIType: type) ?type {
-        return if (@hasDecl(APIType, "Config")) APIType.Config else null;
+    pub fn ResolveConfigType(comptime APIType: type) type {
+        return if (@hasDecl(APIType, "Config")) APIType.Config else struct {};
     }
 
     pub fn GetRegistry(comptime APIType: type) ?EntryConfig {
         if (!@hasDecl(APIType, "entry_config")) return null;
         return APIType.entry_config;
     }
-
-    pub fn ProxyFor(comptime T: type) type {
+    
+    /// Given the type's API registry entry, returns the corresponding handle type
+    /// which differs depending on the management mode.
+    pub fn HandleFor(comptime T: type) type {
         const entry_config = GetRegistry(T) orelse
             @compileError("cannot create a proxy for: " ++ @typeName(T) ++ " (no entry config)"); 
-
-        return struct {
-            handle: entry_config.
-        };
+        return ManagedResourceType(entry_config.management, T);
+    }
+    
+    pub fn EnvFor(comptime T: type) type {
+        return if (@hasDecl(T, "Env")) T.Env else env.Empty();
     }
 };
 
@@ -123,7 +132,7 @@ pub fn RegistryEntryType(comptime config: EntryConfig) type {
 /// by LSPs. I might redo this if it turns out this template doesn't
 /// get directly touched by user code.
 fn InitFnTemplate(comptime config: EntryConfig) type {
-    const error_type = config.init_errors orelse anyerror;
+    const error_type = config.InitErrors orelse anyerror;
     if (config.config_type) |ct| {
         if (config.requires_alloc) {
             return *const fn (*config.State, *const Context, Allocator, ct) error_type!void;

@@ -22,6 +22,11 @@ pub fn APIFactory(
     comptime variant: FactoryVariant,
     comptime fac_config: Config,
 ) type {
+
+    // Dunno why I put this as a parameter, but might use it later
+    // so I'll keep it.
+    _ = fac_config;
+
     // common set of functions
     const FactoryBase = struct {
         const FactoryBase = @This();
@@ -32,16 +37,18 @@ pub fn APIFactory(
             comptime APIType: type,
             inst: *APIType,
             config: crapi.ResolveConfigType(APIType),
-        ) !*APIType {
-            const ConfigType = @TypeOf(config);
-            const EnvFields = crapi.ResolveEnv(APIType);
-            const ErrorType = crapi.ComptimeEntry(APIType).init_errors;
+        ) !void {
+            const entry_config = crapi.GetRegistry(APIType) orelse
+                @compileError("Invalid API type: " ++ @typeName(APIType) ++ " (could not find registry config)");
+            const EnvFields = crapi.EnvFor(APIType);
+            const ConfigType = entry_config.ConfigType;
+            const ErrorType = entry_config.InitErrors;
             const InitFunc = *const fn (
                 *APIType,
                 *Context,
-                *EnvFields,
+                EnvFields,
                 ConfigType,
-            ) ErrorType!APIType;
+            ) ErrorType!void;
 
             const reg_entry = self.ctx.registry.getEntry(common.typeId(APIType)) orelse
                 return error.InvalidAPIType;
@@ -51,8 +58,8 @@ pub fn APIFactory(
             const initFn: InitFunc = @ptrCast(@alignCast(reg_entry.initFn));
 
             try initFn(inst, self.ctx, populated_env, config);
-            return inst;
         }
+
     
 
         /// Used for lifecycle deinits, users can just directly call
@@ -67,21 +74,45 @@ pub fn APIFactory(
 
             base: FactoryBase,
 
+            fn allocManaged(
+                self: *Factory, 
+                comptime APIType: type, 
+            ) !std.meta.Tuple(&.{
+                *APIType, 
+                crapi.ManagedReturnType(APIType)}
+            ) {
+                _ = self;
+                const managed_info = @typeInfo(crapi.ManagedReturnType(APIType));
+                _ = managed_info;
+
+                return undefined;
+            }
+
             /// some management modes return different handle variants or just pointers.
             /// This depends on the handle variant of the particular type
-            pub fn init(
+            pub fn create(
                 self: *Factory,
                 comptime APIType: type, 
                 config: crapi.ResolveConfigType(APIType),
             ) !crapi.ManagedReturnType(APIType) { 
+                const ptr, const h = try self.allocManaged(APIType);
+                std.debug.print("Type of config: {s}\n", .{@typeName(@TypeOf(config))});
+                try self.base.createBase(APIType, ptr, config);
+
+                return h;
             }
 
-            pub fn initPreconfig(
+            /// Creates a new API type with a pre-populated configuration value.
+            /// Since, some vulkan objects can be heavy on parameterization.
+            pub fn createPreconfig(
                 self: *Factory,
                 comptime APIType: type, 
                 comptime profile: crapi.ResolveConfigRegistry(APIType).Profiles,
                 params: anytype,
             ) !crapi.ManagedReturnType(APIType) {
+                _ = self;
+                _ = profile;
+                _ = params;
             }
         },
         .Unmanaged => struct {
@@ -95,6 +126,9 @@ pub fn APIFactory(
                 allocator: std.mem.Allocator,
                 config: crapi.ResolveConfigType(APIType),
             ) !*APIType {
+                _ = self;
+                _ = allocator;
+                _ = config;
             }
 
             pub fn initPreconfig(
@@ -104,6 +138,10 @@ pub fn APIFactory(
                 allocator: std.mem.Allocator,
                 params: anytype,
             ) !*APIType {
+                _ = self;
+                _ = profile;
+                _ = allocator;
+                _ = params;
             }
 
             pub fn initInPlace(
@@ -112,6 +150,9 @@ pub fn APIFactory(
                 inst: *APIType,
                 config: crapi.ResolveConfigType(APIType),
             ) !void {
+                _ = self;
+                _ = inst;
+                _ = config;
             }
             
             pub fn initInPlacePreconfig(
@@ -121,39 +162,19 @@ pub fn APIFactory(
                 inst: *APIType,
                 params: anytype,
             ) !void {
+                _ = self;
+                _ = profile;
+                _ = inst;
+                _ = params;
             }
         },
     };
 }
 
+const CommandBuffer = api.CommandBuffer.CommandBuffer;
+
 test "factory functionality" {
-    const app = try Context.init(testing.allocator, .{});
+    var factory_shit: APIFactory(.Managed, .{}) = undefined;
 
-    var managed_factory = app.getAPIFactory(.managed, .{});
-    var unmanaged_factory = app.getAPIFactory(.unmanaged, .{});
-
-    const jerry_face_image1 = try managed_factory.init(api.Image, .{
-        .some_image_config = .yadda_yadda,
-    });
-
-    const jerry_face_image12 = try unmanaged_factory.init(
-        api.Image,
-        testing.allocator,
-        .{
-            .some_image_config = .yadda_yadda,
-        },
-    );
-
-    var jerry_face_image121: api.Image = undefined;
-    try unmanaged_factory.initInPlace( // this variant only exists on unmanaged thingies
-        api.Image,
-        &jerry_face_image121,
-        .{
-            .some_image_config = .yadda_yadda,
-        },
-    );
-
-    const jerry_face_image2 = try managed_factory.initPreconfig(api.Image, .SomeProfileName, .{
-        .extra_option = .yadda,
-    });
+    _ = try factory_shit.create(CommandBuffer, .{.one_shot = true});
 }

@@ -4,6 +4,7 @@ const vk = @import("vulkan");
 const base = @import("base.zig");
 const util = @import("common").util;
 const queue = @import("queue.zig");
+const env = @import("../env.zig");
 
 const Context = @import("../context.zig");
 const DeviceHandler = base.DeviceHandler;
@@ -18,17 +19,13 @@ h_cmd_pool: vk.CommandPool,
 dev: *const DeviceHandler,
 one_shot: bool = false,
 
-pub const Config = struct {
-    src_queue_family: queue.QueueFamily = .Graphics,
-    one_shot: bool = false,
-};
 
-pub fn init(ctx: *const Context, config: Config) !Self {
+pub fn init(ctx: *const Context, config: CommandBuffer.Config) !Self {
     const dev = ctx.env(.dev);
     return try initDev(dev, config);
 }
 
-fn initDev(dev: *const DeviceHandler, config: Config) !Self {
+fn initDev(dev: *const DeviceHandler, config: CommandBuffer.Config) !Self {
     var cmd_buffer: vk.CommandBuffer = undefined;
     dev.pr_dev.allocateCommandBuffers(
         &.{
@@ -56,7 +53,7 @@ fn initDev(dev: *const DeviceHandler, config: Config) !Self {
     return api_cmd_buf;
 }
 
-pub fn oneShot(dev: *const DeviceHandler, config: Config) !Self {
+pub fn oneShot(dev: *const DeviceHandler, config: CommandBuffer.Config) !Self {
     var buf = try initDev(dev, config);
     buf.one_shot = true;
 
@@ -117,12 +114,17 @@ const common = @import("common");
 const Registry = res.Registry;
 
 pub const CommandBuffer = struct {
+    pub const Config = struct {
+        src_queue_family: queue.QueueFamily = .Graphics,
+        one_shot: bool = false,
+    };
+
     pub const entry_config =
         Registry.EntryConfig{
             .State = CommandBuffer,
             .Proxy = CommandBufferProxy,
-            .init_errors = CommandBufferInitErrors,
-            .config_type = Config,
+            .InitErrors = CommandBufferInitErrors,
+            .ConfigType = Config,
             .management = .Pooled,
             .initFn = dummyInit,
             .deinitFn = dummyDeinit,
@@ -143,7 +145,8 @@ const CommandBufferInitErrors = error{
     Something,
 };
 
-fn dummyInit(self: *CommandBuffer, ctx: *const Context, config: Config) CommandBufferInitErrors!void {
+fn dummyInit(self: *CommandBuffer, ctx: *const Context, e: env.Empty(), config: CommandBuffer.Config) CommandBufferInitErrors!void {
+    _ = e;
     _ = self;
     _ = config;
     _ = ctx;

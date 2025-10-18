@@ -18,7 +18,7 @@ const Heap = @This();
 
 const Context = @import("../../context.zig");
 
-pub const Env = Context.EnvSubset(.{.mem_layout, .di});
+pub const Env = Context.Environment.EnvSubset(.{.mem_layout, .di});
 
 pub const Error = error {
     IncompatibleProperties,
