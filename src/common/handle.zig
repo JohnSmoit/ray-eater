@@ -54,6 +54,10 @@ pub fn Handle(
                         return getter(self.p, self.h);
                     }
 
+                    pub fn getAssumeValid(self: @This()) *T {
+                        return getter(self.p, self.h) catch unreachable;
+                    }
+
                     pub fn init(h: Self, mem: *anyopaque) @This() {
                         return .{
                             .h = h,
@@ -83,6 +87,10 @@ pub fn Handle(
 
                     pub fn get(self: @This()) err!*T {
                         return getter(self.p, self.h);
+                    }
+
+                    pub fn getAssumeValid(self: @This()) *T {
+                        return getter(self.p, self.h) catch unreachable;
                     }
 
                     pub fn init(h: Self, mem: *anyopaque) @This() {

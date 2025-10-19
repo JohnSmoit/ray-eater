@@ -39,7 +39,7 @@ const EnvBacking = struct {
     mem_layout: Ref(api.DeviceMemoryLayout, .{}),
 
 };
-const Environment = e.For(EnvBacking);
+pub const Environment = e.For(EnvBacking);
 
 const Self = @This();
 

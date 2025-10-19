@@ -50,7 +50,7 @@ pub const EntryConfig = struct {
     InitErrors: type = error{},
 
     // the type of the configuration struct (if any)
-    ConfigType: type = struct{},
+    ConfigType: type = struct {},
     // whether or not initialization depends on an allocator
     management: ManagementMode = .Pooled,
 
@@ -60,14 +60,6 @@ pub const EntryConfig = struct {
 
 const ObjectPool = common.ObjectPool;
 
-fn ManagedResourceType(comptime mode: ManagementMode, comptime T: type) type {
-    const PoolType = ObjectPool(T, .{});
-    return switch(mode) {
-        .Pooled => PoolType.ReifiedHandle,
-        .Streamed => PoolType.ReifiedHandle,
-        else => *T,
-    };
-}
 
 /// Comptime registry API
 /// In comptime, the types themselves are the registries.
@@ -75,10 +67,19 @@ fn ManagedResourceType(comptime mode: ManagementMode, comptime T: type) type {
 /// The working of this registry API depends on a coherent
 /// naming scheme for faster lookups
 pub const ComptimeAPI = struct {
+    pub fn ManagedResourceType(comptime mode: ManagementMode, comptime T: type) type {
+        const PoolType = ObjectPool(T, .{});
+        return switch (mode) {
+            .Pooled, .Streamed => PoolType.ReifiedHandle,
+            else => *T,
+        };
+    }
 
     // gets the config registry, cuz thats a generic
     fn ConfigRegistryFor(comptime T: type) type {
-        return if (@hasDecl(T, "Registry")) @TypeOf(T.Registry) else 
+        return if (@hasDecl(T, "Registry"))
+            @TypeOf(T.Registry)
+        else
             @compileError("Invalid type " ++ @typeName(T) ++ " (missing config registry)");
     }
 
@@ -88,6 +89,11 @@ pub const ComptimeAPI = struct {
             @compileError("Invalid type: " ++ @typeName(T) ++ " (missing type registry)");
 
         return registry.Proxy;
+    }
+
+    pub fn ProxyAPIMixin(comptime T: type) type {
+        _ = T;
+        return u32;
     }
 
     pub fn ResolveConfigRegistry(comptime ConfigType: type) ConfigRegistryFor(ConfigType) {
@@ -102,15 +108,15 @@ pub const ComptimeAPI = struct {
         if (!@hasDecl(APIType, "entry_config")) return null;
         return APIType.entry_config;
     }
-    
+
     /// Given the type's API registry entry, returns the corresponding handle type
     /// which differs depending on the management mode.
     pub fn HandleFor(comptime T: type) type {
         const entry_config = GetRegistry(T) orelse
-            @compileError("cannot create a proxy for: " ++ @typeName(T) ++ " (no entry config)"); 
+            @compileError("cannot create a proxy for: " ++ @typeName(T) ++ " (no entry config)");
         return ManagedResourceType(entry_config.management, T);
     }
-    
+
     pub fn EnvFor(comptime T: type) type {
         return if (@hasDecl(T, "Env")) T.Env else env.Empty();
     }
@@ -177,13 +183,13 @@ pub fn init(allocator: Allocator) !Self {
 }
 
 /// the type referenced by "T" must match the shape of
-/// a configurable type as defined in the "CRAPI" 
+/// a configurable type as defined in the "CRAPI"
 /// type specification
 pub fn addEntry(
     self: *Self,
     comptime T: type,
 ) void {
-    const entry_config = ComptimeAPI.GetRegistry(T) orelse 
+    const entry_config = ComptimeAPI.GetRegistry(T) orelse
         @compileError("cannot create a registry entry for type: " ++ @typeName(T) ++ " (no entry config)");
 
     const entry = RegistryEntry{

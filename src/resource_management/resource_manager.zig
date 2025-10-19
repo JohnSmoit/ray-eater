@@ -17,6 +17,10 @@ pub const Config = struct {
     pool_sizes: usize,
 };
 
+fn PoolHandle(comptime T: type) type {
+    return common.ObjectPool(T, .{}).ReifiedHandle;
+}
+
 // pools: MemoryPoolsTable,
 
 pub fn init(config: Config, registry: *Registry) !Self {
@@ -50,3 +54,16 @@ pub fn init(config: Config, registry: *Registry) !Self {
    //     .pools = table,
    // };
 }
+
+pub fn createTransient(self: *Self, comptime APIType: type) !*APIType {
+    _ = self;
+
+    return undefined;
+}
+
+pub fn reservePooledByType(self: *Self, comptime APIType: type) !PoolHandle(APIType) {
+    _ = self;
+
+    return PoolHandle(APIType).init(undefined, undefined);
+}
+

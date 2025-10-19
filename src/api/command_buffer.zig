@@ -156,9 +156,11 @@ fn dummyDeinit(self: *const CommandBuffer) void {
     _ = self;
 }
 
+const crapi = @import("../resource_management/res.zig").Registry.ComptimeAPI;
+
 
 pub const CommandBufferProxy = struct {
-    const CommandBufferHandle = common.Handle(CommandBuffer, .{});
+    const CommandBufferHandle = crapi.HandleFor(CommandBuffer);
 
     handle: CommandBufferHandle,
 

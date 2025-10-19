@@ -20,12 +20,7 @@ const crapi = Registry.ComptimeAPI;
 
 pub fn APIFactory(
     comptime variant: FactoryVariant,
-    comptime fac_config: Config,
 ) type {
-
-    // Dunno why I put this as a parameter, but might use it later
-    // so I'll keep it.
-    _ = fac_config;
 
     // common set of functions
     const FactoryBase = struct {
@@ -81,11 +76,36 @@ pub fn APIFactory(
                 *APIType, 
                 crapi.ManagedReturnType(APIType)}
             ) {
-                _ = self;
-                const managed_info = @typeInfo(crapi.ManagedReturnType(APIType));
-                _ = managed_info;
+                const ProxyType = crapi.ManagedReturnType(APIType);
+                const entry_config = crapi.GetRegistry(APIType) orelse 
+                    @compileError("Invalid registry");
 
-                return undefined;
+                var ptr: *APIType = undefined;
+                var proxy: ProxyType = undefined;
+
+                switch (entry_config.management) {
+                    //HACK: Technically, unmanaged types shouldn't
+                    //be creatable from a managed factory
+                    //For now, I just use the context allocator
+                    .Unmanaged => {
+                        ptr = try self.base.ctx.allocator.create(APIType);
+                        proxy = .{.handle = ptr};
+                    },
+                    .Transient => {
+                        ptr = try self.base.ctx.resources.createTransient(APIType);
+                        proxy = .{.handle = ptr};
+                    },
+                    //TODO: Streamed allocations need an actual system
+                    .Pooled, .Streamed => {
+                        const handle = 
+                            try self.base.ctx.resources.reservePooledByType(APIType);
+
+                        ptr = handle.getAssumeValid();
+                        proxy = .{.handle = handle};
+                    },
+                }
+
+                return .{ptr, proxy};
             }
 
             /// some management modes return different handle variants or just pointers.
@@ -174,7 +194,7 @@ pub fn APIFactory(
 const CommandBuffer = api.CommandBuffer.CommandBuffer;
 
 test "factory functionality" {
-    var factory_shit: APIFactory(.Managed, .{}) = undefined;
+    var factory_shit: APIFactory(.Managed) = undefined;
 
     _ = try factory_shit.create(CommandBuffer, .{.one_shot = true});
 }
