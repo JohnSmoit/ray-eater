@@ -128,11 +128,6 @@ fn findParentFieldType(pt: type, fname: []const u8) type {
 
 pub fn Empty() type {
     return struct {
-        const Self = @This();
-        pub fn populate(ctx: anytype) Self {
-            _ = ctx;
-            return .{};
-        }
     };
 }
 
