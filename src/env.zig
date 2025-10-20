@@ -133,8 +133,29 @@ pub fn Empty() type {
             _ = ctx;
             return .{};
         }
-
     };
+}
+
+/// Ensure LHS is a pointer
+pub fn populate(lhs: anytype, rhs: anytype) void {
+    const lhs_info = @typeInfo(@TypeOf(lhs));
+    const rhs_info = @typeInfo(@TypeOf(rhs));
+
+    switch (lhs_info) {
+        .pointer => {},
+        else => 
+            @compileError("lhs (" ++ @typeName(@TypeOf(lhs)) ++ ") must be a pointer"),
+    }
+    switch (rhs_info) {
+        .@"struct" => {},
+        else => 
+            @compileError("rhs (" ++ @typeName(@TypeOf(rhs)) ++ ") must be a struct type"),
+    }
+
+    inline for (rhs_info.@"struct".fields) |fld| {
+        if (@hasField(lhs_info.pointer.child, fld.name))
+            @field(lhs, fld.name) = @field(rhs, fld.name);
+    }
 }
 
 pub fn For(comptime T: type) type {
@@ -147,8 +168,6 @@ pub fn For(comptime T: type) type {
 
         /// Defines an env subset type which can be automatically populated by a factory
         pub fn EnvSubset(comptime fields: anytype) type {
-            const Declaration = std.builtin.Type.Declaration;
-
             comptime var field_infos: []const StructField = &.{};
             for (fields) |enum_lit| {
                 const matching_field = std.meta.fieldInfo(T, enum_lit);
@@ -165,27 +184,14 @@ pub fn For(comptime T: type) type {
                 field_infos = field_infos ++ [1]StructField{mapped_field_info};
             }
 
-            const populate_decl = Declaration{ .name = "populate" };
-
             const SubsetType = @Type(.{
                 .@"struct" = .{
                     .fields = field_infos,
-                    .decls = &.{populate_decl},
+                    .decls = &.{},
                     .layout = .auto,
                     .is_tuple = false,
                 },
             });
-
-            const Populate = struct {
-                pub fn populate(ctx: anytype) SubsetType {
-                    var new: SubsetType = undefined;
-                    inline for (field_infos) |fld| {
-                        @field(new, fld.name) = @field(ctx, fld.name);
-                    }
-                }
-            };
-
-            SubsetType.populate = Populate.populate;
 
             return SubsetType;
         }
@@ -246,6 +252,24 @@ pub fn For(comptime T: type) type {
                     else => &@field(val, parent_name),
                 };
                 // otherwise, make a reference to it in the parent (this is why a pointer must be passed)
+            }
+
+            return Self{
+                .inner = backing,
+            };
+        }
+
+        /// initialize the env fields directly from a structure
+        /// This is meant to be used mainly for testing purposes where creating
+        /// an entire context is unwieldy.
+        pub fn initRaw(val: anytype) Self {
+            var backing: T = undefined;
+
+            inline for (Bindings.map) |bind| {
+                if (@hasField(@TypeOf(val), bind.backing_name)) {
+                    @field(backing, bind.backing_name).inner =
+                        @field(val, bind.backing_name);
+                }
             }
 
             return Self{

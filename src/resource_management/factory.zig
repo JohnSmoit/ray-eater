@@ -4,197 +4,181 @@ const std = @import("std");
 
 const Context = @import("../context.zig");
 const Registry = @import("registry.zig");
-const Self = @This();
 
 const testing = std.testing;
 const common = @import("common");
 const cfg = common.config;
 const api = @import("../api/api.zig");
+const env_api = @import("../env.zig");
 
 const Config = struct {};
+const Factory = @This();
 
 const FactoryVariant = enum { Managed, Unmanaged };
 
-
 const crapi = Registry.ComptimeAPI;
 
-pub fn APIFactory(
-    comptime variant: FactoryVariant,
-) type {
+/// Since anything can be created, any sort of static resource
+/// could be required from an application instance.
+const Env = Context.Environment;
 
-    // common set of functions
-    const FactoryBase = struct {
-        const FactoryBase = @This();
-        ctx: *Context,
+env: Env,
 
-        pub fn createBase(
-            self: *FactoryBase,
-            comptime APIType: type,
-            inst: *APIType,
-            config: crapi.ResolveConfigType(APIType),
-        ) !void {
-            const entry_config = crapi.GetRegistry(APIType) orelse
-                @compileError("Invalid API type: " ++ @typeName(APIType) ++ " (could not find registry config)");
-            const EnvFields = crapi.EnvFor(APIType);
-            const ConfigType = entry_config.ConfigType;
-            const ErrorType = entry_config.InitErrors;
-            const InitFunc = *const fn (
-                *APIType,
-                *Context,
-                EnvFields,
-                ConfigType,
-            ) ErrorType!void;
-
-            const reg_entry = self.ctx.registry.getEntry(common.typeId(APIType)) orelse
-                return error.InvalidAPIType;
-
-            const populated_env = EnvFields.populate(self.ctx.ctx_env);
-            // nice and safe.
-            const initFn: InitFunc = @ptrCast(@alignCast(reg_entry.initFn));
-
-            try initFn(inst, self.ctx, populated_env, config);
-        }
-
-    
-
-        /// Used for lifecycle deinits, users can just directly call
-        /// deinit for the low-level API
-        pub fn deinitBase() void {
-        }
+pub fn init(env: Env) Factory {
+    return Factory {
+        .env = env,
     };
+}
 
-    return switch(variant) {
-        .Managed => struct {
-            const Factory = @This();
+fn createInPlace(
+    self: *Factory,
+    comptime APIType: type,
+    inst: *APIType,
+    config: crapi.ResolveConfigType(APIType),
+) !void {
+    const entry_config = crapi.GetRegistry(APIType) orelse
+        @compileError("Invalid API type: " ++ @typeName(APIType) ++ " (could not find registry config)");
+    const EnvFields = crapi.EnvFor(APIType);
+    const ConfigType = entry_config.ConfigType;
+    const ErrorType = entry_config.InitErrors;
+    const InitFunc = *const fn (
+        *APIType,
+        EnvFields,
+        ConfigType,
+    ) ErrorType!void;
+    const registry = self.env.get(.registry);
 
-            base: FactoryBase,
+    const reg_entry = registry.getEntry(common.typeId(APIType)) orelse
+        return error.InvalidAPIType;
 
-            fn allocManaged(
-                self: *Factory, 
-                comptime APIType: type, 
-            ) !std.meta.Tuple(&.{
-                *APIType, 
-                crapi.ManagedReturnType(APIType)}
-            ) {
-                const ProxyType = crapi.ManagedReturnType(APIType);
-                const entry_config = crapi.GetRegistry(APIType) orelse 
-                    @compileError("Invalid registry");
+    var populated_env: EnvFields = undefined;
 
-                var ptr: *APIType = undefined;
-                var proxy: ProxyType = undefined;
+    env_api.populate(&populated_env, self.env);
+    // nice and safe.
+    const initFn: InitFunc = @ptrCast(@alignCast(reg_entry.initFn));
 
-                switch (entry_config.management) {
-                    //HACK: Technically, unmanaged types shouldn't
-                    //be creatable from a managed factory
-                    //For now, I just use the context allocator
-                    .Unmanaged => {
-                        ptr = try self.base.ctx.allocator.create(APIType);
-                        proxy = .{.handle = ptr};
-                    },
-                    .Transient => {
-                        ptr = try self.base.ctx.resources.createTransient(APIType);
-                        proxy = .{.handle = ptr};
-                    },
-                    //TODO: Streamed allocations need an actual system
-                    .Pooled, .Streamed => {
-                        const handle = 
-                            try self.base.ctx.resources.reservePooledByType(APIType);
+    try initFn(inst, populated_env, config);
+}
 
-                        ptr = handle.getAssumeValid();
-                        proxy = .{.handle = handle};
-                    },
-                }
+fn allocManaged(
+    self: *Factory, 
+    comptime APIType: type, 
+) !std.meta.Tuple(&.{
+    *APIType, 
+    crapi.ManagedReturnType(APIType)}
+) {
+    const ProxyType = crapi.ManagedReturnType(APIType);
+    const entry_config = crapi.GetRegistry(APIType) orelse 
+        @compileError("Invalid registry");
 
-                return .{ptr, proxy};
-            }
+    // unmanaged resource shouldn't be created using managed functions
+    std.debug.assert(entry_config.management != .Unmanaged);
+    var res = self.env.get(.res);
 
-            /// some management modes return different handle variants or just pointers.
-            /// This depends on the handle variant of the particular type
-            pub fn create(
-                self: *Factory,
-                comptime APIType: type, 
-                config: crapi.ResolveConfigType(APIType),
-            ) !crapi.ManagedReturnType(APIType) { 
-                const ptr, const h = try self.allocManaged(APIType);
-                std.debug.print("Type of config: {s}\n", .{@typeName(@TypeOf(config))});
-                try self.base.createBase(APIType, ptr, config);
+    var ptr: *APIType = undefined;
+    var proxy: ProxyType = undefined;
 
-                return h;
-            }
 
-            /// Creates a new API type with a pre-populated configuration value.
-            /// Since, some vulkan objects can be heavy on parameterization.
-            pub fn createPreconfig(
-                self: *Factory,
-                comptime APIType: type, 
-                comptime profile: crapi.ResolveConfigRegistry(APIType).Profiles,
-                params: anytype,
-            ) !crapi.ManagedReturnType(APIType) {
-                _ = self;
-                _ = profile;
-                _ = params;
-            }
+    switch (entry_config.management) {
+        .Transient => {
+            ptr = try res.createTransient(APIType);
+            proxy = .{.handle = ptr};
         },
-        .Unmanaged => struct {
-            const Factory = @This();
+        //TODO: Streamed allocations need an actual system
+        .Pooled, .Streamed => {
+            const handle = 
+                try res.reservePooledByType(APIType);
 
-            base: FactoryBase,
-
-            pub fn init(
-                self: *Factory,
-                comptime APIType: type, 
-                allocator: std.mem.Allocator,
-                config: crapi.ResolveConfigType(APIType),
-            ) !*APIType {
-                _ = self;
-                _ = allocator;
-                _ = config;
-            }
-
-            pub fn initPreconfig(
-                self: *Factory,
-                comptime APIType: type, 
-                comptime profile: crapi.ResolveConfigRegistry(APIType).Profiles,
-                allocator: std.mem.Allocator,
-                params: anytype,
-            ) !*APIType {
-                _ = self;
-                _ = profile;
-                _ = allocator;
-                _ = params;
-            }
-
-            pub fn initInPlace(
-                self: *Factory,
-                comptime APIType: type, 
-                inst: *APIType,
-                config: crapi.ResolveConfigType(APIType),
-            ) !void {
-                _ = self;
-                _ = inst;
-                _ = config;
-            }
-            
-            pub fn initInPlacePreconfig(
-                self: *Factory,
-                comptime APIType: type, 
-                comptime profile: crapi.ResolveConfigRegistry(APIType).Profiles,
-                inst: *APIType,
-                params: anytype,
-            ) !void {
-                _ = self;
-                _ = profile;
-                _ = inst;
-                _ = params;
-            }
+            ptr = handle.getAssumeValid();
+            proxy = .{.handle = handle};
         },
-    };
+
+        .Unmanaged => unreachable,
+    }
+
+    return .{ptr, proxy};
+}
+
+/// some management modes return different handle variants or just pointers.
+/// This depends on the handle variant of the particular type
+pub fn create(
+    self: *Factory,
+    comptime APIType: type, 
+    config: crapi.ResolveConfigType(APIType),
+) !crapi.ManagedReturnType(APIType) { 
+    const ptr, const h = try self.allocManaged(APIType);
+    try self.createInPlace(APIType, ptr, config);
+
+    return h;
+}
+
+/// Creates a new API type with a pre-populated configuration value.
+/// Since, some vulkan objects can be heavy on parameterization.
+pub fn createPreconfig(
+    self: *Factory,
+    comptime APIType: type, 
+    comptime profile: crapi.ResolveConfigRegistry(APIType).Profiles,
+    params: anytype,
+) !crapi.ManagedReturnType(APIType) {
+    const ConfigType = crapi.ResolveConfigType(APIType);
+    const config = ConfigType.profile(profile, params);
+
+    return self.create(APIType, config);
+}
+
+/// Creates a new object but with a user-provided allocator
+pub fn createAllocated(
+    self: *Factory,
+    comptime APIType: type, 
+    allocator: std.mem.Allocator,
+    config: crapi.ResolveConfigType(APIType),
+) !*APIType {
+    const new = try allocator.create(APIType);
+    errdefer allocator.destroy(new);
+
+    try self.createInPlace(APIType, new, config);
+    return new;
+}
+
+pub fn createPreconfigAllocated(
+    self: *Factory,
+    comptime APIType: type, 
+    comptime profile: crapi.ResolveConfigRegistry(APIType).Profiles,
+    allocator: std.mem.Allocator,
+    params: anytype,
+) !*APIType {
+    const ConfigType = crapi.ResolveConfigType(APIType);
+    const config = ConfigType.profile(profile, params);
+
+    return self.createAllocated(APIType, allocator, config);
+}
+
+pub fn createInPlacePreconfig(
+    self: *Factory,
+    comptime APIType: type, 
+    comptime profile: crapi.ResolveConfigRegistry(APIType).Profiles,
+    inst: *APIType,
+    params: anytype,
+) !void {
+    const ConfigType = crapi.ResolveConfigType(APIType);
+    const config = ConfigType.profile(profile, params);
+
+    try self.createInPlace(APIType, inst, config);
 }
 
 const CommandBuffer = api.CommandBuffer.CommandBuffer;
 
+const ray_testing = @import("../root.zig").testing;
+
 test "factory functionality" {
-    var factory_shit: APIFactory(.Managed) = undefined;
+
+    const test_ctx = try ray_testing.MinimalVulkanContext.initMinimalVulkan(
+        testing.allocator, 
+        .{.noscreen=true}
+    );
+    var factory_shit = Factory.init(Env.initRaw(.{}));
+
+    defer test_ctx.deinit(testing.allocator);
 
     _ = try factory_shit.create(CommandBuffer, .{.one_shot = true});
 }

@@ -145,11 +145,10 @@ const CommandBufferInitErrors = error{
     Something,
 };
 
-fn dummyInit(self: *CommandBuffer, ctx: *const Context, e: env.Empty(), config: CommandBuffer.Config) CommandBufferInitErrors!void {
+fn dummyInit(self: *CommandBuffer, e: env.Empty(), config: CommandBuffer.Config) CommandBufferInitErrors!void {
     _ = e;
     _ = self;
     _ = config;
-    _ = ctx;
 }
 
 fn dummyDeinit(self: *const CommandBuffer) void {

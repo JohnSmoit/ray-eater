@@ -31,12 +31,17 @@ const EnvBacking = struct {
         .field = "descriptor_pool",
         .mutable = true,
     }),
+    res: Ref(res.ResourceManager, .{
+        .field = "resources", 
+        .mutable = true,
+    }),
 
     gi: Ref(GlobalInterface, .{ .field = "global_interface" }),
     ii: Ref(InstanceInterface, .{ .field = "inst_interface" }),
     di: Ref(DeviceInterface, .{ .field = "dev_interface" }),
 
     mem_layout: Ref(api.DeviceMemoryLayout, .{}),
+    registry: Ref(res.Registry, .{}),
 
 };
 pub const Environment = e.For(EnvBacking);
