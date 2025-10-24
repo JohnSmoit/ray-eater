@@ -36,7 +36,7 @@ fn ErrorOnFalse(comptime func: fn () callconv(.c) c_int, comptime err: anytype) 
 }
 
 extern fn glfwGetInstanceProcAddress(instance: vk.Instance, name: [*:0]const u8) vk.PfnVoidFunction;
-extern fn glfwCreateWindowSurface(instance: vk.Instance, window: *GLFWwindow, allocation_callbacks: ?*const vk.AllocationCallbacks, surface: *vk.SurfaceKHR) vk.Result;
+pub extern fn glfwCreateWindowSurface(instance: vk.Instance, window: *GLFWwindow, allocation_callbacks: ?*const vk.AllocationCallbacks, surface: *vk.SurfaceKHR) vk.Result;
 
 pub const getInstanceProcAddress = glfwGetInstanceProcAddress;
 
@@ -49,8 +49,6 @@ pub const pollEvents = c.glfwPollEvents;
 pub const setErrorCallback = c.glfwSetErrorCallback;
 
 pub const getTime = c.glfwGetTime;
-
-pub const createWindowSurface = c.glfwCreateWindowSurface;
 
 const glfwDestroyWindow = c.glfwDestroyWindow;
 const glfwWindowShouldClose = c.glfwWindowShouldClose;

@@ -73,8 +73,10 @@ pub const ShaderModule = sh.Module;
 // Obtaining RTTI for vulkan API
 const Registry = @import("../resource_management/res.zig").Registry;
 
-pub fn initRegistry(reg: *Registry) !void {
-    try CommandBuffer.addEntries(reg);
+pub fn populateRegistry(reg: *Registry) !void {
+    // temporary, until I restructure this file to include
+    // data declarations rather than wrappers.
+    reg.registerType(CommandBuffer.CommandBuffer);
 }
 
 // comptime {

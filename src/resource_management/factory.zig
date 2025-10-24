@@ -11,10 +11,7 @@ const cfg = common.config;
 const api = @import("../api/api.zig");
 const env_api = @import("../env.zig");
 
-const Config = struct {};
 const Factory = @This();
-
-const FactoryVariant = enum { Managed, Unmanaged };
 
 const crapi = Registry.ComptimeAPI;
 
@@ -172,10 +169,8 @@ const ray_testing = @import("../root.zig").testing;
 
 test "factory functionality" {
 
-    const test_ctx = try ray_testing.MinimalVulkanContext.initMinimalVulkan(
-        testing.allocator, 
-        .{.noscreen=true}
-    );
+    var test_ctx: ray_testing.TestingContext = undefined;
+    try test_ctx.initFor(.{});
     var factory_shit = Factory.init(Env.initRaw(.{}));
 
     defer test_ctx.deinit(testing.allocator);

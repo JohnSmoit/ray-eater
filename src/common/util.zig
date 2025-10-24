@@ -50,10 +50,8 @@ pub fn fnSignatureMatches(
     comptime A: type,
     comptime B: type,
 ) bool {
-    const info_a = if (@typeInfo(A).@"fn") @typeInfo(A).@"fn" else 
-        return false;
-    const info_b = if (@typeInfo(B).@"fn") @typeInfo(B).@"fn" else 
-        return false;
+    const info_a = if (@typeInfo(A).@"fn") @typeInfo(A).@"fn" else return false;
+    const info_b = if (@typeInfo(B).@"fn") @typeInfo(B).@"fn" else return false;
 
     if (info_a.params.len != info_b.params.len) return false;
 
@@ -123,4 +121,51 @@ pub fn signatureMatches(a: *const Function, b: *const Function) bool {
 
     if (!a.calling_convention.eql(b)) return false;
     return true;
+}
+
+///TODO: Param for ordering fields in the bitset,
+/// which I don't really need now, but could be useful later
+pub fn EnumToBitfield(comptime E: type) type {
+    const e_info = @typeInfo(E);
+    const default_value: bool = false;
+
+    if (e_info != .@"enum")
+        @compileError("Invalid type: " ++ @typeName(E) ++ " must be an enum to convert to bitfield");
+
+    comptime var bit_fields: []const StructField = &.{};
+    for (e_info.@"enum".fields) |fld| {
+        bit_fields = bit_fields ++ &[_]StructField{.{
+            .type = bool,
+            .alignment = 0,
+            .is_comptime = false,
+            .default_value_ptr = &default_value,
+            .name = fld.name,
+        }};
+    }
+
+    const InnerBitfield = @Type(.{.@"struct" = std.builtin.Type.Struct{
+        .decls = &.{},
+        .fields = bit_fields,
+        .layout = .@"packed",
+        .is_tuple = false,
+    }});
+
+    const BackingInt = @typeInfo(InnerBitfield).@"struct".backing_integer;
+
+    return struct {
+        pub const EnumType = E;
+        pub const Bitfield = InnerBitfield;
+        const EnumBitfield = @This();
+
+        val: Bitfield = .{},
+        pub fn initPopulated(vals: []const EnumType) EnumBitfield {
+            var new: EnumBitfield = .{};
+
+            for (vals) |v| {
+                new.set(v);
+            }
+
+            return new;
+        }
+    };
 }

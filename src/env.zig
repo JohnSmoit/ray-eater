@@ -116,14 +116,14 @@ fn MakeRefBindings(comptime T: type) type {
     };
 }
 
-fn findParentFieldType(pt: type, fname: []const u8) type {
+fn FindParentFieldType(pt: type, fname: []const u8) type {
     const fields = @typeInfo(@typeInfo(pt).pointer.child);
 
     for (fields.@"struct".fields) |fld| {
         if (std.mem.order(u8, fname, fld.name) == .eq) return fld.type;
     }
 
-    unreachable;
+    @compileError("Could not find matching field for name: " ++ fname ++ " (FindParentFieldInType)");
 }
 
 pub fn Empty() type {
@@ -241,7 +241,7 @@ pub fn For(comptime T: type) type {
                 const backing_name = bind.backing_name;
                 const parent_name = bind.parent_name;
                 // if the field is a pointer, simply copy it over to the inner struct
-                const pft = findParentFieldType(ParentType, parent_name);
+                const pft = FindParentFieldType(ParentType, parent_name);
                 @field(backing, backing_name).inner = switch (@typeInfo(pft)) {
                     .pointer => @field(val, parent_name),
                     else => &@field(val, parent_name),

@@ -30,7 +30,7 @@ const TypeId = common.TypeId;
 
 const Self = @This();
 
-pub const PfnAddRegistryEntries = *const fn () []EntryConfig;
+pub const PfnPopulateRegistry = *const fn(*Self) error{OutOfMemory}!void;
 
 pub const ManagementMode = enum {
     Unmanaged,
@@ -182,10 +182,11 @@ pub fn init(allocator: Allocator) !Self {
     };
 }
 
+
 /// the type referenced by "T" must match the shape of
 /// a configurable type as defined in the "CRAPI"
 /// type specification
-pub fn addEntry(
+pub fn registerType(
     self: *Self,
     comptime T: type,
 ) void {
@@ -329,7 +330,7 @@ test "api entries" {
     defer arena.deinit();
 
     var reg = try Self.init(arena.allocator());
-    try api.initRegistry(&reg);
+    try api.populateRegistry(&reg);
 
     var q1 = reg.select();
     const item = q1

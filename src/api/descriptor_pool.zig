@@ -113,9 +113,9 @@ const PoolArena = struct {
     }
 
     h_desc_pool: vk.DescriptorPool,
-    di: *const api.DeviceInterface,
+    di: api.DeviceInterface,
 
-    pub fn init(di: *const api.DeviceInterface, size: usize) !PoolArena {
+    pub fn init(di: api.DeviceInterface, size: usize) !PoolArena {
         const pool_sizes = poolSizesForCount(size);
 
         const pool_create_info = vk.DescriptorPoolCreateInfo{
@@ -220,6 +220,7 @@ scene_pool: PoolArena,
 static_pool: PoolArena,
 
 const Self = @This();
+pub const Env = Context.Environment.EnvSubset(.{.di});
 
 pub const PoolSizes = struct {
     transient: usize,
@@ -232,8 +233,8 @@ fn poolByUsage(self: *Self, usage: UsageInfo) AnyPool {
     return self.pools_by_usage.get(usage.lifetime_bits) orelse unreachable;
 }
 
-pub fn initSelf(self: *Self, ctx: *const Context, sizes: PoolSizes) !void {
-    const di = ctx.env(.di);
+pub fn initSelf(self: *Self, env: Env, sizes: PoolSizes) !void {
+    const di: api.DeviceInterface = env.di;
 
     self.transient_pool = try PoolArena.init(di, sizes.transient);
     errdefer self.transient_pool.deinit();
