@@ -109,6 +109,7 @@ pub const TestingContext = struct {
         },
         fields: []const Environment.ContextEnum = &.{
             .inst,
+            .surf,
             .dev,
             .desc,
             .registry,
@@ -158,21 +159,14 @@ pub const TestingContext = struct {
     window: ?glfw.Window,
 
     fn initInst(ctx: *TestingContext, cfg: *Config) !void {
-        ctx.inst = try api.InstanceHandler.init(.{
-            .allocator = ctx.allocator,
-            .enable_debug_log = true,
-            .loader = glfw.getInstanceProcAddress,
-            .instance = .{
-                .validation_layers = cfg.validation_layers,
-                .required_extensions = &.{
-                    api.extensions.ext_debug_utils.name,
-                    api.extensions.khr_surface.name,
-                    //TODO: create proper platform window surface for non-windows users
-                    api.extensions.khr_win_32_surface.name,
-                    api.extensions.khr_get_physical_device_properties_2.name,
-                },
-            }
-        });
+        ctx.inst = try api.InstanceHandler.init(.{ .allocator = ctx.allocator, .enable_debug_log = true, .loader = glfw.getInstanceProcAddress, .instance = .{
+            .validation_layers = cfg.validation_layers,
+            .required_extensions = &.{
+                api.extensions.ext_debug_utils.name,
+                api.extensions.khr_surface.name,
+                api.extensions.khr_win_32_surface.name,
+            },
+        } });
 
         ctx.global_interface = &ctx.inst.w_db;
         ctx.inst_interface = &ctx.inst.pr_inst;
@@ -190,9 +184,21 @@ pub const TestingContext = struct {
         });
 
         ctx.dev_interface = &ctx.dev.pr_dev;
+
+        //HACK: Env initialization should NOT be order dependent on field initialization,
+        //because that suddenly couples parts of the initialization process together horribly.
+        ctx.env = Environment.init(ctx);
     }
 
     fn initSurf(ctx: *TestingContext, cfg: *Config) !void {
+        glfw.Window.hints(.{
+            .{ glfw.CLIENT_API, glfw.NO_API },
+            .{ glfw.VISIBLE, glfw.FALSE },
+        });
+
+        ctx.window = try glfw.Window.create(100, 200, "Dummy", null, null);
+        errdefer ctx.window.?.destroy();
+
         ctx.surf = try api.SurfaceHandler.init(if (ctx.window) |*w|
             w
         else
@@ -204,6 +210,18 @@ pub const TestingContext = struct {
     fn initDesc(ctx: *TestingContext, cfg: *Config) !void {
         var e: api.DescriptorPool.Env = undefined;
         env.populate(&e, ctx.env);
+
+        _ = try ctx.dev_interface.createDescriptorPool(&.{
+            // NOTE: In the future, pools and sets will be managed separately :)
+            .pool_size_count = 1,
+            .max_sets = 1,
+            .p_pool_sizes = &.{.{
+                .type = .uniform_buffer,
+                .descriptor_count = 1,
+            }},
+        }, null);
+
+        std.debug.print("Addr: {*} vs {*}\n", .{e.di, ctx.dev_interface});
 
         try ctx.descriptor_pool.initSelf(e, cfg.desc_pool_sizes);
     }
@@ -236,13 +254,18 @@ pub const TestingContext = struct {
     }
 
     /// Initializes only the specified env fields for a testing context
-    pub fn initFor(ctx: *TestingContext, cfg: Config) !void {
-        ctx.env = Environment.init(ctx);
+    pub fn initFor(
+        ctx: *TestingContext,
+        allocator: std.mem.Allocator,
+        cfg: Config,
+    ) !void {
+        try glfw.init();
 
-        ctx.window = cfg.window;
+        ctx.allocator = allocator;
 
         var cfg2 = cfg;
         cfg2._selected = ContextBitfield.initPopulated(cfg.fields);
+
 
         for (cfg.fields) |fld| {
             const initializer = init_comp_dispatch.getAssertContains(fld);
@@ -251,7 +274,12 @@ pub const TestingContext = struct {
     }
 
     pub fn deinit(ctx: *TestingContext, allocator: std.mem.Allocator) void {
-        _ = ctx;
+        if (ctx.window) |w| {
+            w.destroy();
+        }
+
+        glfw.deinit();
+
         _ = allocator;
     }
 };

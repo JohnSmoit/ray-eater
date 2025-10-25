@@ -150,7 +150,8 @@ pub fn EnumToBitfield(comptime E: type) type {
         .is_tuple = false,
     }});
 
-    const BackingInt = @typeInfo(InnerBitfield).@"struct".backing_integer;
+    const BackingInt = @typeInfo(InnerBitfield).@"struct".backing_integer orelse 
+        @compileError("Too many fields in enum: " ++ @typeName(E));
 
     return struct {
         pub const EnumType = E;
@@ -166,6 +167,19 @@ pub fn EnumToBitfield(comptime E: type) type {
             }
 
             return new;
+        }
+
+        pub fn has(bits: EnumBitfield, val: EnumType) bool {
+            var dumbass_copy = bits.val;
+            const bit: usize = @intFromEnum(val);
+            const int_val: BackingInt = @as(*BackingInt, @ptrCast(@alignCast(&dumbass_copy))).*;
+            return (int_val >> @as(u4, @intCast(bit))) & 0x1 != 0;
+        }
+
+        pub fn set(bits: *EnumBitfield, val: EnumType) void {
+            const bits_as_int = @as(*BackingInt, @ptrCast(@alignCast(&bits.val)));
+            const bit = @intFromEnum(val);
+            bits_as_int.* |= @as(BackingInt, 1) << @as(u4, @intCast(bit));
         }
     };
 }

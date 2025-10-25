@@ -127,29 +127,27 @@ fn FindParentFieldType(pt: type, fname: []const u8) type {
 }
 
 pub fn Empty() type {
-    return struct {
-    };
+    return struct {};
 }
 
 /// Ensure LHS is a pointer
 pub fn populate(lhs: anytype, rhs: anytype) void {
     const lhs_info = @typeInfo(@TypeOf(lhs));
-    const rhs_info = @typeInfo(@TypeOf(rhs));
+    const rhs_info = @typeInfo(@TypeOf(rhs.inner));
 
     switch (lhs_info) {
         .pointer => {},
-        else => 
-            @compileError("lhs (" ++ @typeName(@TypeOf(lhs)) ++ ") must be a pointer"),
+        else => @compileError("lhs (" ++ @typeName(@TypeOf(lhs)) ++ ") must be a pointer"),
     }
     switch (rhs_info) {
         .@"struct" => {},
-        else => 
-            @compileError("rhs (" ++ @typeName(@TypeOf(rhs)) ++ ") must be a struct type"),
+        else => @compileError("rhs (" ++ @typeName(@TypeOf(rhs)) ++ ") must be a struct type"),
     }
 
     inline for (rhs_info.@"struct".fields) |fld| {
-        if (@hasField(lhs_info.pointer.child, fld.name))
-            @field(lhs, fld.name) = @field(rhs, fld.name);
+        if (@hasField(lhs_info.pointer.child, fld.name)) {
+            @field(lhs, fld.name) = @field(rhs.inner, fld.name).inner;
+        }
     }
 }
 

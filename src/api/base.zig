@@ -144,14 +144,14 @@ pub const InstanceHandler = struct {
                 .application_version = @bitCast(vk.makeApiVersion(0, 0, 0, 0)),
                 .p_engine_name = "No Engine",
                 .engine_version = @bitCast(vk.makeApiVersion(0, 0, 0, 0)),
-                .api_version = @bitCast(vk.API_VERSION_1_4),
+                .api_version = @bitCast(vk.API_VERSION_1_3),
             },
             .p_next = &defaultDebugConfig(),
             .enabled_extension_count = @intCast(config.instance.required_extensions.len),
             .pp_enabled_extension_names = config.instance.required_extensions.ptr,
             .enabled_layer_count = @intCast(config.instance.validation_layers.len),
             .pp_enabled_layer_names = config.instance.validation_layers.ptr,
-            .flags = .{ .enumerate_portability_bit_khr = true },
+            .flags = .{},
         }, null);
 
         self.w_di = try self.allocator.create(vk.InstanceWrapper);
@@ -389,6 +389,7 @@ pub const DeviceHandler = struct {
                 dev,
                 allocator,
             ) catch {
+                log.err("Could not get queue family proprties while enumerating device\n", .{});
                 return found_indices;
             };
         defer allocator.free(dev_queue_family_props);
@@ -396,6 +397,7 @@ pub const DeviceHandler = struct {
         for (dev_queue_family_props, 0..) |props, index| {
             const i: u32 = @intCast(index);
             log.debug("Family {d}, Supports:\n {s}", .{i, props.queue_flags});
+
 
             if (props.queue_flags.contains(.{
                 .graphics_bit = true,
@@ -497,6 +499,7 @@ pub const DeviceHandler = struct {
             config.surface,
             parent.allocator,
         );
+        std.debug.print("Got device queue indices?\n", .{});
 
         //HACK: Extremely lazy fix for device being hardcoded
         //for a surface. Please replace this once proper featureset
@@ -527,7 +530,7 @@ pub const DeviceHandler = struct {
             },
             .{
                 .queue_family_index = dev_queue_indices.present_family orelse
-                    undefined,
+                    @panic("This is bad"),
                 .queue_count = 1,
                 .p_queue_priorities = &priority,
             },

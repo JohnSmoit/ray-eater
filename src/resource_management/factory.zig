@@ -170,10 +170,10 @@ const ray_testing = @import("../root.zig").testing;
 test "factory functionality" {
 
     var test_ctx: ray_testing.TestingContext = undefined;
-    try test_ctx.initFor(.{});
-    var factory_shit = Factory.init(Env.initRaw(.{}));
-
+    try test_ctx.initFor(testing.allocator, .{});
     defer test_ctx.deinit(testing.allocator);
+
+    var factory_shit = Factory.init(Env.initRaw(.{}));
 
     _ = try factory_shit.create(CommandBuffer, .{.one_shot = true});
 }

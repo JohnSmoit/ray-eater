@@ -18,6 +18,7 @@ pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0]const u8) callconv(
 pub const CLIENT_API = c.GLFW_CLIENT_API;
 pub const NO_API = c.GLFW_NO_API;
 pub const RESIZABLE = c.GLFW_RESIZABLE;
+pub const VISIBLE = c.GLFW_VISIBLE;
 
 pub const GLFWwindow = c.GLFWwindow;
 
