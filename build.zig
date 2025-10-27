@@ -216,7 +216,7 @@ fn buildTests(b: *Build, lib_mod: *Module, deps: Dependencies, opts: BuildOpts) 
 
     const test_step = b.addRunArtifact(test_comp);
     const common_test_step = b.addRunArtifact(common_tests);
-    const test_cmd = b.step("run-tests", "run all unit tests");
+    const test_cmd = b.step("test", "run all unit tests");
     
     test_cmd.dependOn(&test_step.step);
     test_cmd.dependOn(&common_test_step.step);

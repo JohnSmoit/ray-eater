@@ -71,6 +71,7 @@ fn allocManaged(
     // unmanaged resource shouldn't be created using managed functions
     std.debug.assert(entry_config.management != .Unmanaged);
     var res = self.env.get(.res);
+    std.debug.print("Resource manager address in factory: {*}\n", .{res});
 
     var ptr: *APIType = undefined;
     var proxy: ProxyType = undefined;
@@ -169,11 +170,14 @@ const ray_testing = @import("../root.zig").testing;
 
 test "factory functionality" {
 
-    var test_ctx: ray_testing.TestingContext = undefined;
-    try test_ctx.initFor(testing.allocator, .{});
-    defer test_ctx.deinit(testing.allocator);
+    var butt = std.heap.DebugAllocator(.{}).init;
+    const allocator = butt.allocator();
 
-    var factory_shit = Factory.init(Env.initRaw(.{}));
+    var test_ctx: ray_testing.TestingContext = undefined;
+    try test_ctx.initFor(allocator, .{});
+    defer test_ctx.deinit(allocator);
+
+    var factory_shit = Factory.init(test_ctx.env);
 
     _ = try factory_shit.create(CommandBuffer, .{.one_shot = true});
 }

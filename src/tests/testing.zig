@@ -123,10 +123,12 @@ pub const TestingContext = struct {
 
         window: ?glfw.Window = null,
         desc_pool_sizes: api.DescriptorPool.PoolSizes = .{
-            .transient = 1024,
-            .scene = 1024,
-            .static = 2048,
+            .transient = 128,
+            .scene = 128,
+            .static = 256,
         },
+
+        res_pool_sizes: usize = 256,
     };
 
     const init_comp_dispatch = std.EnumMap(Environment.ContextEnum, PfnCtxInit).init(.{
@@ -188,6 +190,8 @@ pub const TestingContext = struct {
         //HACK: Env initialization should NOT be order dependent on field initialization,
         //because that suddenly couples parts of the initialization process together horribly.
         ctx.env = Environment.init(ctx);
+
+        std.debug.print("Address of res: {*} vs {*}\n", .{ctx.env.get(.res), &ctx.resources});
     }
 
     fn initSurf(ctx: *TestingContext, cfg: *Config) !void {
@@ -221,8 +225,6 @@ pub const TestingContext = struct {
             }},
         }, null);
 
-        std.debug.print("Addr: {*} vs {*}\n", .{e.di, ctx.dev_interface});
-
         try ctx.descriptor_pool.initSelf(e, cfg.desc_pool_sizes);
     }
 
@@ -230,10 +232,17 @@ pub const TestingContext = struct {
         // needs the resource manager to actually exist first
         // THe type registry will need to be populated from config,
         // as will the general configuration for resource manager
-        _ = ctx;
-        _ = cfg;
+        
+        ctx.resources = try res.ResourceManager.init(.{
+            .allocator = ctx.allocator, 
+            .pool_sizes = cfg.res_pool_sizes,
+        }, &ctx.registry);
 
-        @panic("Please implmenet the resource manager first!");
+        std.debug.print("Address of res: {*} vs {*}\n", .{ctx.env.get(.res), &ctx.resources});
+        _ = try ctx.resources.reservePooledByType(api.CommandBuffer.CommandBuffer);
+        std.debug.print("Survived A\n", .{});
+        _ = try ctx.env.get(.res).reservePooledByType(api.CommandBuffer.CommandBuffer);
+        std.debug.print("Survived B\n", .{});
     }
 
     fn initMemLayout(ctx: *TestingContext, cfg: *Config) !void {

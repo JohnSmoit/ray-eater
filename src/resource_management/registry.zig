@@ -23,6 +23,7 @@ const common = @import("common");
 const Context = @import("../context.zig");
 const cfg = common.config;
 const env = @import("../env.zig");
+const util = common.util;
 
 const Allocator = std.mem.Allocator;
 const AnyPtr = common.AnyPtr;
@@ -280,6 +281,23 @@ pub const Query = struct {
             } else {
                 return null;
             }
+        }
+
+        pub fn collect(self: *Iterator, allocator: Allocator) ?[]*const RegistryEntry {
+            _ = self;
+            _ = allocator;
+            @panic("Query.Iterator.collect: needs implementation");
+        }
+
+        pub fn getCount(self: *const Iterator) usize {
+            var dup = self.*;
+            var count: usize = 0;
+
+            while (dup.next()) |_| {
+                count += 1;
+            }
+
+            return count;
         }
     };
 

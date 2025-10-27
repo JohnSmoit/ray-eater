@@ -499,7 +499,6 @@ pub const DeviceHandler = struct {
             config.surface,
             parent.allocator,
         );
-        std.debug.print("Got device queue indices?\n", .{});
 
         //HACK: Extremely lazy fix for device being hardcoded
         //for a surface. Please replace this once proper featureset
