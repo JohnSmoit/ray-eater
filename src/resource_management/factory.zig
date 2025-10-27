@@ -168,16 +168,19 @@ const CommandBuffer = api.CommandBuffer.CommandBuffer;
 
 const ray_testing = @import("../root.zig").testing;
 
-test "factory functionality" {
-
-    var butt = std.heap.DebugAllocator(.{}).init;
-    const allocator = butt.allocator();
+// Ideally, we'd get this working without memory leaks
+test "factory basic functionality" {
 
     var test_ctx: ray_testing.TestingContext = undefined;
-    try test_ctx.initFor(allocator, .{});
-    defer test_ctx.deinit(allocator);
+    try test_ctx.initFor(testing.allocator, .{});
+    defer test_ctx.deinit(testing.allocator);
 
     var factory_shit = Factory.init(test_ctx.env);
 
-    _ = try factory_shit.create(CommandBuffer, .{.one_shot = true});
+    const piss = try factory_shit.create(CommandBuffer, .{.one_shot = true});
+    std.debug.print("The type name is: {s}\n", .{@typeName(@TypeOf(piss))});
+}
+
+
+test "factory unmanaged functionality" {
 }

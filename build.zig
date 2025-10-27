@@ -217,7 +217,7 @@ fn buildTests(b: *Build, lib_mod: *Module, deps: Dependencies, opts: BuildOpts) 
     const test_step = b.addRunArtifact(test_comp);
     const common_test_step = b.addRunArtifact(common_tests);
     const test_cmd = b.step("test", "run all unit tests");
-    
+
     test_cmd.dependOn(&test_step.step);
     test_cmd.dependOn(&common_test_step.step);
 }
@@ -230,12 +230,24 @@ pub fn build(b: *Build) void {
         .optimize = b.standardOptimizeOption(.{}),
     };
 
+    const opt_build_samples = b.option(
+        bool,
+        "build_samples",
+        "whether or not to build sample executables (defaults: true)",
+    ) orelse true;
+
+    const opt_build_tests = b.option(
+        bool,
+        "build_tests",
+        "whether or not to build sample executables (defaults: true)",
+    ) orelse true;
+
     const deps = buildDeps(b, opts);
     const lib_mod, const lib_exe = buildLibrary(b, deps, opts);
 
     // handle samples and testing if specified
-    buildSamples(b, lib_mod, deps, opts);
-    buildTests(b, lib_mod, deps, opts);
+    if (opt_build_samples) buildSamples(b, lib_mod, deps, opts);
+    if (opt_build_tests) buildTests(b, lib_mod, deps, opts);
 
     // zls-friendly check step
     // (which made all the rest of the code way grosser)
