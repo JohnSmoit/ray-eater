@@ -25,7 +25,7 @@ const GraphicsPipeline = api.GraphicsPipeline;
 const RenderPass = api.RenderPass;
 const FixedFunctionState = api.FixedFunctionState;
 const Descriptor = api.Descriptor;
-const DescriptorBinding = api.ResolvedDescriptorBinding;
+const DescriptorLayout = api.DescriptorLayout;
 const CommandBuffer = api.CommandBuffer;
 
 const Semaphore = api.Semaphore;
@@ -141,6 +141,10 @@ const SampleState = struct {
             .inst_extensions = helpers.glfwInstanceExtensions(),
             .loader = glfw.glfwGetInstanceProcAddress,
             .window = &self.window,
+            .management = .{
+                .allocator = self.allocator,
+                .pool_sizes = 1024,
+            },
         });
     }
 
@@ -177,18 +181,27 @@ const SampleState = struct {
         try self.gpu_state.uniforms.setData(&self.gpu_state.host_uniforms);
 
         // create fragment-specific descriptors
-        self.graphics.descriptor = try Descriptor.init(self.ctx, self.allocator, .{
-            .bindings = &.{ .{
-                .data = .{ .Uniform = self.gpu_state.uniforms.buffer() },
-                .stages = .{ .fragment_bit = true },
-            }, DescriptorBinding{
-                .data = .{ .Sampler = .{
-                    .sampler = self.gpu_state.render_sampler,
-                    .view = self.gpu_state.render_view.h_view,
-                } },
-                .stages = .{ .fragment_bit = true },
-            } },
+        var frag_desc_layout = try DescriptorLayout.init(self.ctx, self.allocator, 2);
+        frag_desc_layout.addDescriptors(&.{
+            .{ 0, "FragUniforms", .Uniform, .{ .fragment_bit = true } },
+            .{ 1, "MainTex", .Sampler, .{ .fragment_bit = true } },
         });
+        try frag_desc_layout.resolve();
+
+        self.graphics.descriptor = try Descriptor.init(self.ctx, .{
+            .layout = frag_desc_layout,
+            .usage = .{
+                .lifetime_bits = .Static,
+            },
+        });
+
+        self.graphics.descriptor.bindUniformsNamed(
+            "FragUniforms",
+            self.gpu_state.uniforms.buffer(),
+        );
+        self.graphics.descriptor.bindSamplerNamed("MainTex", self.gpu_state.render_sampler, self.gpu_state.render_view);
+
+        self.graphics.descriptor.update();
 
         try self.graphics.render_quad.initSelf(self.ctx, self.allocator, .{
             .frag_shader = &frag_shader,
@@ -243,26 +256,27 @@ const SampleState = struct {
         self.gpu_state.compute_uniforms = try UniformBuffer(ComputeUniforms).create(self.ctx);
         self.gpu_state.particles = try StorageBuffer(Particle).create(self.ctx, PARTICLE_COUNT);
 
-        const descriptors: []const DescriptorBinding = &.{
-            .{
-                .data = .{ .Uniform = self.gpu_state.compute_uniforms.buffer() },
-                .stages = .{ .compute_bit = true },
-            },
-            .{
-                .data = .{ .StorageBuffer = self.gpu_state.particles.buffer() },
-                .stages = .{ .compute_bit = true },
-            },
-            .{
-                .data = .{ .Image = .{
-                    .img = &self.gpu_state.render_target,
-                    .view = self.gpu_state.render_view.h_view,
-                } },
-                .stages = .{ .compute_bit = true },
-            },
-        };
-        self.compute.pipeline = try Compute.init(self.ctx, self.allocator, .{
+        var compute_desc_layout = try DescriptorLayout.init(self.ctx, self.allocator, 3);
+        compute_desc_layout.addDescriptors(&.{
+            .{ 0, "Uniforms", .Uniform, .{ .compute_bit = true } },
+            .{ 1, "Particles", .StorageBuffer, .{ .compute_bit = true } },
+            .{ 2, "RenderTarget", .Image, .{ .compute_bit = true } },
+        });
+        try compute_desc_layout.resolve();
+
+        var compute_descriptor = try Descriptor.init(self.ctx, .{
+            .layout = compute_desc_layout,
+            .usage = .{ .lifetime_bits = .Static },
+        });
+
+        compute_descriptor.bindUniformsNamed("Uniforms", self.gpu_state.compute_uniforms.buffer());
+        compute_descriptor.bindBufferNamed("Particles", self.gpu_state.particles.buffer());
+        compute_descriptor.bindImageNamed("RenderTarget", &self.gpu_state.render_target, self.gpu_state.render_view);
+        compute_descriptor.update();
+
+        self.compute.pipeline = try Compute.init(self.ctx, .{
             .shader = &shader,
-            .desc_bindings = descriptors,
+            .desc = compute_descriptor,
         });
     }
 

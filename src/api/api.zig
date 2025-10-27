@@ -8,11 +8,12 @@ const ind_buf = @import("index_buffer.zig");
 const sh = @import("shader.zig");
 const uni_buf = @import("uniform.zig");
 const vert_buf = @import("vertex_buffer.zig");
+const common = @import("common_types.zig");
 
 // direct vulkan-zig imports
-pub const GlobalInterface = vk.BaseWrapper;
-pub const InstanceInterface = vk.InstanceProxy;
-pub const DeviceInterface = vk.DeviceProxy;
+pub const GlobalInterface = *const vk.BaseWrapper;
+pub const InstanceInterface = *const vk.InstanceProxy;
+pub const DeviceInterface = *const vk.DeviceProxy;
 pub const DynamicState = vk.DynamicState;
 
 /// All registered extensions for devices and instances
@@ -21,6 +22,7 @@ pub const extensions = vk.extensions;
 pub const InstanceHandler = base.InstanceHandler; 
 pub const DeviceHandler = base.DeviceHandler;
 pub const SurfaceHandler = base.SurfaceHandler;
+pub const DeviceMemoryLayout = @import("memory/DeviceMemoryLayout.zig");
 
 pub const GraphicsQueue = queue.GraphicsQueue;
 pub const ComputeQueue = queue.ComputeQueue;
@@ -48,13 +50,17 @@ pub const ComptimeVertexBuffer = vert_buf.VertexBuffer;
 pub const ComptimeIndexBuffer = ind_buf.IndexBuffer;
 pub const ComptimeUniformBuffer = uni_buf.UniformBuffer;
 pub const ComptimeStorageBuffer = @import("storage_buffer.zig").ComptimeStorageBuffer;
-const BufInterface = buf.AnyBuffer;
+pub const BufInterface = buf.AnyBuffer;
 
 pub const Descriptor = @import("descriptor.zig");
-pub const ResolvedDescriptorBinding = Descriptor.ResolvedBinding;
+pub const DescriptorPool = @import("descriptor_pool.zig");
+pub const DescriptorLayout = Descriptor.DescriptorLayout;
+pub const DescriptorType = common.DescriptorType;
+pub const DescriptorUsageInfo = common.DescriptorUsageInfo;
+
 
 // additional utility structs and stuff
-const types = @import("types.zig");
+const types = @import("common_types.zig");
 pub const SyncInfo = types.SyncInfo;
 
 // sync stuff
@@ -64,4 +70,16 @@ pub const Fence = sync.Fence;
 // shaders
 pub const ShaderModule = sh.Module;
 
+// Obtaining RTTI for vulkan API
+const Registry = @import("../resource_management/res.zig").Registry;
 
+pub fn populateRegistry(reg: *Registry) !void {
+    // temporary, until I restructure this file to include
+    // data declarations rather than wrappers.
+    reg.registerType(CommandBuffer.CommandBuffer);
+}
+
+// comptime {
+//     _ = @import("memory/allocator.zig");
+//     _ = @import("memory/Heap.zig");
+// }

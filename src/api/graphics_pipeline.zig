@@ -1,7 +1,7 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const base = @import("base.zig");
-const util = @import("../util.zig");
+const util = @import("common").util;
 const shader = @import("shader.zig");
 
 const Allocator = std.mem.Allocator;

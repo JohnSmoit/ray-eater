@@ -5,7 +5,7 @@ const StructInfo = TypeInfo.Struct;
 const vk = @import("vulkan");
 
 const meth = @import("../math.zig");
-const util = @import("../util.zig");
+const util = @import("common").util;
 const buf_api = @import("buffer.zig");
 
 const Layout = union(enum) {

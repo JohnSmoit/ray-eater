@@ -4,9 +4,11 @@ const vk = @import("vulkan");
 const glfw = @import("glfw");
 
 const e = @import("env.zig");
+const res = @import("resource_management/res.zig");
 
 const Allocator = std.mem.Allocator;
 const ExtensionNameList = std.ArrayList([*:0]const u8);
+const Registry = res.Registry;
 
 const Device = api.DeviceHandler;
 const Instance = api.InstanceHandler;
@@ -25,12 +27,24 @@ const EnvBacking = struct {
     inst: Ref(Instance, .{}),
     dev: Ref(Device, .{}),
     surf: Ref(Surface, .{}),
+    desc: Ref(api.DescriptorPool, .{
+        .field = "descriptor_pool",
+        .mutable = true,
+    }),
+    res: Ref(res.ResourceManager, .{
+        .field = "resources", 
+        .mutable = true,
+    }),
 
     gi: Ref(GlobalInterface, .{ .field = "global_interface" }),
     ii: Ref(InstanceInterface, .{ .field = "inst_interface" }),
     di: Ref(DeviceInterface, .{ .field = "dev_interface" }),
+
+    mem_layout: Ref(api.DeviceMemoryLayout, .{}),
+    registry: Ref(res.Registry, .{}),
+
 };
-const Environment = e.For(EnvBacking);
+pub const Environment = e.For(EnvBacking);
 
 const Self = @This();
 
@@ -40,9 +54,9 @@ inst: Instance,
 dev: Device,
 surf: Surface,
 
-global_interface: *const GlobalInterface,
-inst_interface: *const InstanceInterface,
-dev_interface: *const DeviceInterface,
+global_interface: GlobalInterface,
+inst_interface: InstanceInterface,
+dev_interface: DeviceInterface,
 
 graphics_queue: api.GraphicsQueue,
 present_queue: api.PresentQueue,
@@ -53,6 +67,10 @@ compute_queue: api.ComputeQueue,
 // vk_api: VulkanAPI, // heap allocated cuz big
 
 allocator: Allocator,
+
+resources: res.ResourceManager,
+descriptor_pool: api.DescriptorPool,
+registry: Registry,
 
 fn ResolveEnvType(comptime field: anytype) type {
     return switch (@TypeOf(field)) {
@@ -67,6 +85,7 @@ fn ResolveEnvType(comptime field: anytype) type {
 /// becomes more of a concern
 /// * .inst -> VkInstance (Retrieves application's VkInstance handle, generally not useful for application logic)
 /// * .dev -> VkDevice (Retrieves application's VkDevice handle, generally not useful for application logic)
+/// * .desc -> Descriptor Pool (Application-wide descriptor pools (not much reason to access this on the user side)
 ///
 /// ### Interfaces
 /// * .gi -> global interface (does not require an instanced handle of any kind, generally setup such as extension querying
@@ -92,8 +111,9 @@ pub fn env(self: *const Self, comptime field: anytype) ResolveEnvType(field) {
 pub const Config = struct {
     inst_extensions: []const [*:0]const u8 = &.{},
     dev_extensions: []const [*:0]const u8 = &.{},
-    window: *const glfw.Window,
+    window: ?*const glfw.Window = null,
     loader: glfw.GetProcAddrHandler,
+    management: res.ResourceManager.Config,
 };
 
 /// TODO: maybe have an unmanaged variant for more fine-grained user control
@@ -134,12 +154,9 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
 
     // Initialize Instance and device from parameters
     // Later on, I'll have some better ways to handle ownership and lifetimes
-    // then just raw heap allocations lol
+    // then just raw heap allocations lol (Working on it)
 
-    // Would be great if errdefers worked in initializers... because I like keeping initialization
-    // in initializers when I can
-
-    new.inst = try Instance.init(&.{
+    new.inst = try Instance.init(.{
         .instance = .{
             .required_extensions = all_inst_ext.items,
             .validation_layers = &.{
@@ -147,9 +164,7 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
             },
         },
         .allocator = allocator,
-        .device = undefined,
         .enable_debug_log = true,
-
         .loader = config.loader,
     });
     errdefer new.inst.deinit();
@@ -177,13 +192,26 @@ pub fn init(allocator: Allocator, config: Config) !*Self {
 
     new.ctx_env = Environment.init(new);
 
+    new.registry = try Registry.init(allocator);
+    try api.initRegistry(&new.registry);
+
+    new.resources = try res.ResourceManager.init(config.management, &new.registry);
+    try api.DescriptorPool.initSelf(&new.descriptor_pool, new, .{
+        .scene = 1024,
+        .static = 1024,
+        .transient = 1024,
+    });
+
     return new;
 }
 
 pub fn deinit(self: *Self) void {
+    self.descriptor_pool.deinit();
+
     self.dev.deinit();
     self.surf.deinit();
     self.inst.deinit();
+    self.registry.deinit();
 
     const alloc = self.allocator;
     alloc.destroy(self);
@@ -217,3 +245,6 @@ pub fn presentFrame(
     const image = swapchain.image_index;
     try self.present_queue.present(swapchain, image, sync.sem_wait);
 }
+
+
+

@@ -15,6 +15,7 @@ const Dependencies = struct {
     rshc: *Module,
     vulkan: *Module,
     glfw: *Module,
+    common: *Module,
 };
 
 fn resolveGLFWSystemDeps(m: *Module) void {
@@ -48,10 +49,17 @@ fn buildDeps(b: *Build, opts: BuildOpts) Dependencies {
 
     resolveGLFWSystemDeps(glfw_mod);
 
+    const common_mod = b.createModule(.{
+        .optimize = opts.optimize,
+        .target = opts.target,
+        .root_source_file = b.path("src/common/common.zig"),
+    });
+
     return .{
         .rshc = rshc_mod,
         .vulkan = vulkan_mod,
         .glfw = glfw_mod,
+        .common = common_mod,
     };
 }
 
@@ -69,6 +77,9 @@ fn buildLibrary(
     });
 
     lib_mod.addImport("vulkan", deps.vulkan);
+    lib_mod.addImport("common", deps.common);
+
+    // Temporary for development
     lib_mod.addImport("rshc", deps.rshc);
     lib_mod.addImport("glfw", deps.glfw);
 
@@ -85,16 +96,34 @@ fn buildLibrary(
 
 const SampleEntry = struct {
     name: []const u8,
-    path: []const u8,
+    desc: []const u8,
+    path: []const u8 = "(no description)",
 
     // these get populated later
     mod: *Module = undefined,
     exe: *Compile = undefined,
 };
 var sample_files = [_]SampleEntry{
-    .{ .name = "basic_planes", .path = "basic_planes.zig" },
-    .{ .name = "compute_drawing", .path = "compute_drawing/main.zig" },
-    .{ .name = "test_sample", .path = "test_sample.zig" },
+    .{
+        .name = "basic-planes",
+        .path = "basic_planes.zig",
+        .desc = "basic showcase of bootstrapping vulkan up to 3d rendering",
+    },
+    .{
+        .name = "compute-drawing",
+        .path = "compute_drawing/main.zig",
+        .desc = "drawing using compute shaders",
+    },
+    .{
+        .name = "test-sample",
+        .path = "test_sample.zig",
+        .desc = "test to see if the sample build steps work correctly",
+    },
+    .{
+        .name = "raymarch-fractals",
+        .path = "raymarch_fractals/main.zig",
+        .desc = "pick from a selection of raymarched fractals, all programmed within fragment shaders",
+    },
 };
 
 fn populateSampleModules(
@@ -149,39 +178,48 @@ fn buildSamples(
 ) void {
     populateSampleModules(b, lib_mod, deps, opts);
 
-    const build_sample = b.option(
-        []const u8,
-        "sample",
-        "specify sample to build and run",
-    );
-    if (build_sample) |sample_name| {
-        var entry: ?*SampleEntry = null;
+    for (sample_files) |entry| {
+        b.installArtifact(entry.exe);
 
-        for (&sample_files) |*f| {
-            if (std.mem.order(u8, sample_name, f.name) == .eq) {
-                entry = f;
-                break;
-            }
-        }
+        const run_step = b.addRunArtifact(entry.exe);
+        run_step.addArgs(b.args orelse &.{});
 
-        if (entry == null) return;
-
-        b.installArtifact(entry.?.exe);
-
-        const run_step = b.addRunArtifact(entry.?.exe);
         run_step.step.dependOn(b.getInstallStep());
 
-        const run_cmd = b.step("run", "run a sample executable");
+        const step_name = std.fmt.allocPrint(
+            b.allocator,
+            "run-{s}",
+            .{entry.name},
+        ) catch @panic("Achievement Get: How did we get here?");
+
+        const run_cmd = b.step(step_name, entry.desc);
         run_cmd.dependOn(&run_step.step);
     }
 }
 
 /// adds a single module and compile step containing
 /// all included tests (based on specified options)
-fn buildTests(b: *Build, lib_mod: *Module, deps: Dependencies) void {
-    _ = b;
-    _ = lib_mod;
-    _ = deps;
+fn buildTests(b: *Build, lib_mod: *Module, deps: Dependencies, opts: BuildOpts) void {
+    const test_comp = b.addTest(.{
+        .name = "unit_tests",
+        .root_module = lib_mod,
+        .target = opts.target,
+    });
+
+    const common_tests = b.addTest(.{
+        .name = "common_unit_tests",
+        .root_module = deps.common,
+        .target = opts.target,
+    });
+    b.installArtifact(test_comp);
+    b.installArtifact(common_tests);
+
+    const test_step = b.addRunArtifact(test_comp);
+    const common_test_step = b.addRunArtifact(common_tests);
+    const test_cmd = b.step("test", "run all unit tests");
+
+    test_cmd.dependOn(&test_step.step);
+    test_cmd.dependOn(&common_test_step.step);
 }
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -192,12 +230,24 @@ pub fn build(b: *Build) void {
         .optimize = b.standardOptimizeOption(.{}),
     };
 
+    const opt_build_samples = b.option(
+        bool,
+        "build_samples",
+        "whether or not to build sample executables (defaults: true)",
+    ) orelse true;
+
+    const opt_build_tests = b.option(
+        bool,
+        "build_tests",
+        "whether or not to build sample executables (defaults: true)",
+    ) orelse true;
+
     const deps = buildDeps(b, opts);
     const lib_mod, const lib_exe = buildLibrary(b, deps, opts);
 
     // handle samples and testing if specified
-    buildSamples(b, lib_mod, deps, opts);
-    buildTests(b, lib_mod, deps);
+    if (opt_build_samples) buildSamples(b, lib_mod, deps, opts);
+    if (opt_build_tests) buildTests(b, lib_mod, deps, opts);
 
     // zls-friendly check step
     // (which made all the rest of the code way grosser)

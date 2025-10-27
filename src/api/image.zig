@@ -3,7 +3,7 @@ const vk = @import("vulkan");
 const rsh = @import("rshc");
 
 const buf = @import("buffer.zig");
-const util = @import("../util.zig");
+const util = @import("common").util;
 
 const Allocator = std.mem.Allocator;
 const Context = @import("../context.zig");
@@ -349,7 +349,11 @@ pub fn cmdClear(
     );
 }
 
-fn initSelf(self: *Self, dev: *const DeviceHandler, config: Config) !void {
+fn initSelf(
+    self: *Self,
+    dev: *const DeviceHandler,
+    config: Config,
+) !void {
     const image_info = vk.ImageCreateInfo{
         .image_type = .@"2d",
         .extent = .{

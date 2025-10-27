@@ -1,6 +1,6 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const util = @import("../util.zig");
+const util = @import("common").util;
 
 const Context = @import("../context.zig");
 

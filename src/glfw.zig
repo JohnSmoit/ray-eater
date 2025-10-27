@@ -18,6 +18,7 @@ pub const GetProcAddrHandler = *const (fn (vk.Instance, [*:0]const u8) callconv(
 pub const CLIENT_API = c.GLFW_CLIENT_API;
 pub const NO_API = c.GLFW_NO_API;
 pub const RESIZABLE = c.GLFW_RESIZABLE;
+pub const VISIBLE = c.GLFW_VISIBLE;
 
 pub const GLFWwindow = c.GLFWwindow;
 
@@ -35,11 +36,13 @@ fn ErrorOnFalse(comptime func: fn () callconv(.c) c_int, comptime err: anytype) 
     return wrapperType.wrapper;
 }
 
-pub extern fn glfwGetInstanceProcAddress(instance: vk.Instance, name: [*:0]const u8) vk.PfnVoidFunction;
+extern fn glfwGetInstanceProcAddress(instance: vk.Instance, name: [*:0]const u8) vk.PfnVoidFunction;
 pub extern fn glfwCreateWindowSurface(instance: vk.Instance, window: *GLFWwindow, allocation_callbacks: ?*const vk.AllocationCallbacks, surface: *vk.SurfaceKHR) vk.Result;
 
+pub const getInstanceProcAddress = glfwGetInstanceProcAddress;
+
 pub const init = ErrorOnFalse(c.glfwInit, error.GLFWInitFailed);
-pub const terminate = c.glfwTerminate;
+pub const deinit = c.glfwTerminate;
 pub const vulkanSupported = ErrorOnFalse(c.glfwVulkanSupported, error.VulkanUnsupported);
 pub const getRequiredInstanceExtensions = c.glfwGetRequiredInstanceExtensions;
 pub const getFramebufferSize = c.glfwGetFramebufferSize;
@@ -48,12 +51,15 @@ pub const setErrorCallback = c.glfwSetErrorCallback;
 
 pub const getTime = c.glfwGetTime;
 
-pub const createWindowSurface = c.glfwCreateWindowSurface;
-
 const glfwDestroyWindow = c.glfwDestroyWindow;
 const glfwWindowShouldClose = c.glfwWindowShouldClose;
 const glfwCreateWindow = c.glfwCreateWindow;
 const glfwWindowHint = c.glfwWindowHint;
+
+pub fn instanceExtensions() [][*:0]const u8 {
+    var count: u32 = 0;
+    return @ptrCast(getRequiredInstanceExtensions(&count)[0..count]);
+}
 
 pub const Window = struct {
     handle: *GLFWwindow,

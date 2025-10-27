@@ -1,7 +1,7 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const base = @import("base.zig");
-const util = @import("../util.zig");
+const util = @import("common").util;
 
 const Context = @import("../context.zig");
 const DeviceHandler = base.DeviceHandler;
@@ -101,10 +101,10 @@ pub fn initAlloc(
         .p_attachments = attachments_list.ptr,
 
         .subpass_count = 1,
-        .p_subpasses = util.asManyPtr(vk.SubpassDescription, &subpass_desc),
+        .p_subpasses = &.{subpass_desc},
 
         .dependency_count = 1,
-        .p_dependencies = util.asManyPtr(vk.SubpassDependency, &subpass_dep),
+        .p_dependencies =&.{subpass_dep},
     }, null) catch |err| {
         log.err("Failed to create render pass: {!}", .{err});
         return err;
