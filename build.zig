@@ -12,8 +12,9 @@ const BuildOpts = struct {
 };
 
 const Dependencies = struct {
-    rshc: *Module,
+    assets: *Module,
     vulkan: *Module,
+    zigimg: *Module,
     glfw: *Module,
 };
 
@@ -31,7 +32,6 @@ fn buildDeps(b: *Build, opts: BuildOpts) Dependencies {
             .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml"),
         },
     ).module("vulkan-zig");
-    const rshc_mod = b.dependency("RshLang", .{}).module("rshc");
     const glfw_dep = b.dependency("glfw_windows", .{});
 
     // GLFW is a special beast...
@@ -48,8 +48,23 @@ fn buildDeps(b: *Build, opts: BuildOpts) Dependencies {
 
     resolveGLFWSystemDeps(glfw_mod);
 
+    const assets = b.createModule(.{
+        .optimize = opts.optimize,
+        .target = opts.target,
+        .root_source_file = b.path("src/assets/root.zig"),
+    });
+
+    const zigimg = b.dependency("zigimg", .{
+        .target = opts.target,
+        .optimize = opts.optimize,
+    }).module("zigimg");
+
+    assets.addImport("zigimg", zigimg);
+
+
     return .{
-        .rshc = rshc_mod,
+        .zigimg = zigimg,
+        .assets = assets,
         .vulkan = vulkan_mod,
         .glfw = glfw_mod,
     };
@@ -69,7 +84,7 @@ fn buildLibrary(
     });
 
     lib_mod.addImport("vulkan", deps.vulkan);
-    lib_mod.addImport("rshc", deps.rshc);
+    lib_mod.addImport("assets", deps.assets);
     lib_mod.addImport("glfw", deps.glfw);
 
     const lib = b.addLibrary(.{

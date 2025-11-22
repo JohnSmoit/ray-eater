@@ -41,8 +41,8 @@
             .hash = "N-V-__8AAPJS7wFRVAIGhMZ7cis5e-y5LZfn2KfO5O2jiHGH",
         },
         .vulkan = .{
-            .url = "git+https://github.com/Snektron/vulkan-zig.git#f69af7a9248982cf7536aaf32111843f1a4fa4a9",
-            .hash = "vulkan-0.0.0-r7Ytx91DAwDKIXS2K_fFa-c_SJ5py7K1eCKwPcc33NcQ",
+            .url = "https://github.com/Snektron/vulkan-zig/archive/1446b0b994c2362264cc24513d7c7ec31b469c50.zip",
+            .hash = "vulkan-0.0.0-r7Ytx_VDAwAiMl0YSu2UOkVMIGJN7CeIQaxJR-hUSfD6",
         },
         .glfw_windows = .{
             .url = "https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.bin.WIN64.zip",
