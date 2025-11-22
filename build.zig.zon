@@ -6,7 +6,7 @@
     //
     // It is redundant to include "zig" in this name because it is already
     // within the Zig package namespace.
-    .name = .RayEater,
+    .name = .ray_eater,
 
     // This is a [Semantic Version](https://semver.org/).
     // In a future version of Zig it will be used for package deduplication.
@@ -24,11 +24,11 @@
     // original project's identity. Thus it is recommended to leave the comment
     // on the following line intact, so that it shows up in code reviews that
     // modify the field.
-    .fingerprint = 0x953d38ab57694a14, // Changing this has security and trust implications.
+    .fingerprint = 0x87045727f0180ed9, // Changing this has security and trust implications.
 
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
-    .minimum_zig_version = "0.14.0",
+    .minimum_zig_version = "0.15.0",
 
     // This field is optional.
     // Each dependency must either provide a `url` and `hash`, or a `path`.
@@ -41,16 +41,16 @@
             .hash = "N-V-__8AAPJS7wFRVAIGhMZ7cis5e-y5LZfn2KfO5O2jiHGH",
         },
         .vulkan = .{
-            .url = "git+https://github.com/Snektron/vulkan-zig.git#9b4090c852760ce3210562f62ffaf301479c38ba",
-            .hash = "vulkan-0.0.0-r7Ytx2dUAwDhoUvuIqliqPUbyDZZi0bl_CQIwspUpHs_",
+            .url = "git+https://github.com/Snektron/vulkan-zig.git#f69af7a9248982cf7536aaf32111843f1a4fa4a9",
+            .hash = "vulkan-0.0.0-r7Ytx91DAwDKIXS2K_fFa-c_SJ5py7K1eCKwPcc33NcQ",
         },
         .glfw_windows = .{
             .url = "https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.bin.WIN64.zip",
             .hash = "N-V-__8AAOlnwQD_q2VUB2dZD64hwX7kJ2w9knrChBKgJHe0",
         },
-        .RshLang = .{
-            .url = "git+https://github.com/JohnSmoit/ray-eater-shaders.git#621811032c0d385a1c49d5f655e2498a1de72ab9",
-            .hash = "RshLang-0.0.0-4EjkC1twAACu3mtJTUJzOjluiAhJQzA5rDEGfYHgaMnD",
+        .zigimg = .{
+            .url = "git+https://github.com/zigimg/zigimg.git#b53e228986e127df1223975227969ed6a50126e7",
+            .hash = "zigimg-0.1.0-8_eo2rwbFgCSVcvqipgjAQueoazrTAiIvqk0F2bKYpE1",
         },
     },
     .paths = .{

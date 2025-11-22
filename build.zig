@@ -131,7 +131,6 @@ fn populateSampleModules(
         const sample_exe = b.addExecutable(.{
             .name = f.name,
             .root_module = sample_mod,
-            .optimize = opts.optimize orelse .ReleaseFast,
         });
 
         f.mod = sample_mod;
