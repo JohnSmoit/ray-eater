@@ -10,7 +10,7 @@ Ray Eater (working title) intends to be a unified renderer that provides integra
 Ray eater is still in heavy development, with only the vulkan implementation of the  RHI (rendering hardware interface) being done at the moment. A lot of work is being done behind the scenes to integrate a Gaussian Splat renderer along with the foundational work to create a working asset toolchain that supports the diverse formats of assets required by these sorts of rendering pipelines.
 
 ## Supported Platforms
-* Windows -- Supported
+* Windows 10+
 
 Linux is very close to being supported, but there are still some issues with making the windowing cross platform enough to where the swapchain presents to it without issue
 
